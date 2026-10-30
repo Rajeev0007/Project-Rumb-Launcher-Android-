@@ -154,7 +154,7 @@ fun About(
                 NavigationActionPreference(
                     label = stringResource(id = R.string.acknowledgements),
                     destination = AboutLicenses,
-                    subtitle = "Includes Lawnchair and Android Open Source Project code (GPL-3.0, Apache-2.0)",
+                    subtitle = "Licences and copyright notices",
                 )
             }
         }
