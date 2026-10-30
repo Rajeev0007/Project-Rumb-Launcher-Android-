@@ -76,6 +76,58 @@ CODE_PATCHES = [
         "                isSelected = currentRoute is app.lawnchair.ui.preferences.navigation.RumbStyles,\n"
         "            )\n",
     ),
+    # Bug fix: the drawer defaulted to 50% opacity, so Home screen icons showed through
+    # it whenever wallpaper blur was off. Rumb's drawer is opaque unless you choose otherwise.
+    (
+        "lawnchair/src/app/lawnchair/preferences/PreferenceManager.kt",
+        'val drawerOpacity = FloatPref("pref_drawerOpacity", .5f, recreate)',
+        'val drawerOpacity = FloatPref("pref_drawerOpacity", 1f, recreate)',
+    ),
+    # Bug fix: Home screen icons stayed fully drawn behind the app drawer. Fade the
+    # workspace and dock out as the drawer opens (progress 1 = closed, 0 = open), so a
+    # translucent or blurred drawer shows only the wallpaper, like a real glass panel.
+    (
+        "src/com/android/launcher3/allapps/AllAppsTransitionController.java",
+        "        getAppsViewProgressTranslationY().setValue(mProgress * shiftRange);\n"
+        "        mLauncher.onAllAppsTransition(1 - progress);\n",
+        "        getAppsViewProgressTranslationY().setValue(mProgress * shiftRange);\n"
+        "        mLauncher.onAllAppsTransition(1 - progress);\n"
+        "        float rumbHomeAlpha = Math.max(0f, Math.min(1f, (progress - 0.15f) / 0.35f));\n"
+        "        mLauncher.getWorkspace().setAlpha(rumbHomeAlpha);\n"
+        "        mLauncher.getHotseat().setAlpha(rumbHomeAlpha);\n",
+    ),
+    # Bug fix: the Personal/Work tab used the system accent (green on many phones)
+    # instead of Rumb's accent, clashing with the rest of the theme.
+    (
+        "lawnchair/src/app/lawnchair/preferences2/PreferenceManager2.kt",
+        '        key = stringPreferencesKey(name = "work_profile_tab_background_color"),\n'
+        "        parse = ColorOption::fromString,\n"
+        "        save = ColorOption::toString,\n"
+        "        onSet = { reloadHelper.recreate() },\n"
+        "        defaultValue = ColorOption.SystemAccent,\n",
+        '        key = stringPreferencesKey(name = "work_profile_tab_background_color"),\n'
+        "        parse = ColorOption::fromString,\n"
+        "        save = ColorOption::toString,\n"
+        "        onSet = { reloadHelper.recreate() },\n"
+        "        defaultValue = ColorOption.fromString(context.getString(R.string.config_default_accent_color)),\n",
+    ),
+    # Bug fix: the drawer search bar showed no text until tapped. Show "Search apps".
+    (
+        "lawnchair/src/app/lawnchair/allapps/AllAppsSearchInput.kt",
+        "        input = ViewCompat.requireViewById(this, R.id.input)\n",
+        "        input = ViewCompat.requireViewById(this, R.id.input)\n"
+        "        input.setHint(R.string.all_apps_search_bar_hint)\n",
+    ),
+    (
+        "lawnchair/src/app/lawnchair/allapps/AllAppsSearchInput.kt",
+        '                input.setHint("")\n',
+        "                input.setHint(R.string.all_apps_search_bar_hint)\n",
+    ),
+    (
+        "lawnchair/src/app/lawnchair/allapps/AllAppsSearchInput.kt",
+        'if (input.text.toString() == "/lawnchairdebug") {',
+        'if (input.text.toString() == "/rumbdebug") {',
+    ),
     # Searches from Rumb should not be attributed to Lawnchair's partner segment.
     (
         "lawnchair/src/app/lawnchair/qsb/providers/Startpage.kt",

@@ -91,7 +91,7 @@ private val RumbStylePresets = listOf(
         description = "Clean circles, search in the dock, wallpaper colours",
         iconShape = "circle", dockBackground = false, dockColor = "default", dockAlpha = 0,
         dockRadius = 24f, dockGradient = false, dockSearch = "lawnchair", labels = true,
-        folderOpacity = 1f, drawerOpacity = 0.9f, accent = "system_accent", wantsBlur = false,
+        folderOpacity = 1f, drawerOpacity = 1f, accent = "system_accent", wantsBlur = false,
         preview = listOf(Color(0xFF1B6EF3), Color(0xFF7BB3FF)),
     ),
     RumbStyle(
@@ -99,7 +99,7 @@ private val RumbStylePresets = listOf(
         description = "iPhone-style frosted dock, rounded icons, see-through folders",
         iconShape = "cupertino", dockBackground = true, dockColor = "custom|#ffffffff", dockAlpha = 22,
         dockRadius = 32f, dockGradient = false, dockSearch = "disabled", labels = true,
-        folderOpacity = 0.55f, drawerOpacity = 0.35f, accent = "system_accent", wantsBlur = true,
+        folderOpacity = 0.6f, drawerOpacity = 0.55f, accent = "system_accent", wantsBlur = true,
         preview = listOf(Color(0xFF6A8CFF), Color(0xFFFF9FD2)),
     ),
     RumbStyle(
@@ -107,7 +107,7 @@ private val RumbStylePresets = listOf(
         description = "Soft squircles, calm dock, solid drawer",
         iconShape = "squircle", dockBackground = false, dockColor = "default", dockAlpha = 0,
         dockRadius = 28f, dockGradient = false, dockSearch = "disabled", labels = true,
-        folderOpacity = 0.9f, drawerOpacity = 0.95f, accent = "custom|#ff3e8bff", wantsBlur = false,
+        folderOpacity = 0.9f, drawerOpacity = 1f, accent = "custom|#ff3e8bff", wantsBlur = false,
         preview = listOf(Color(0xFF0F3D7A), Color(0xFF3E8BFF)),
     ),
     RumbStyle(
@@ -115,7 +115,7 @@ private val RumbStylePresets = listOf(
         description = "Rumb violet accent with a colour-fade dock",
         iconShape = "squircle", dockBackground = true, dockColor = "custom|#ff7b5cff", dockAlpha = 70,
         dockRadius = 30f, dockGradient = true, dockSearch = "disabled", labels = true,
-        folderOpacity = 0.85f, drawerOpacity = 0.6f, accent = "custom|#ff5b48c9", wantsBlur = false,
+        folderOpacity = 0.85f, drawerOpacity = 0.92f, accent = "custom|#ff5b48c9", wantsBlur = false,
         preview = listOf(Color(0xFF7B5CFF), Color(0xFF1FB6FF)),
     ),
     RumbStyle(
@@ -148,7 +148,9 @@ private fun applyStyle(
     prefs2.showIconLabelsOnHomeScreen.setBlocking(style.labels)
     prefs2.folderBackgroundOpacity.setBlocking(style.folderOpacity)
     prefs2.folderPreviewBackgroundOpacity.setBlocking(style.folderOpacity)
-    prefs.drawerOpacity.set(style.drawerOpacity)
+    // A see-through drawer only looks like glass over a blurred wallpaper; without blur
+    // permission, keep it mostly solid so text stays readable.
+    prefs.drawerOpacity.set(if (style.wantsBlur && !canBlur) 0.88f else style.drawerOpacity)
     if (style.wantsBlur && canBlur) {
         prefs.enableWallpaperBlur.set(true)
         prefs.wallpaperBlur.set(40)
@@ -219,7 +221,7 @@ fun RumbStylesPreferences(
                 )
             }
             SliderPreference(
-                label = "App drawer opacity",
+                label = "App drawer opacity (lower shows the wallpaper)",
                 adapter = prefs.drawerOpacity.getAdapter(),
                 valueRange = 0f..1f,
                 step = 0.05f,

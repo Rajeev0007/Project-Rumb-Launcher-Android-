@@ -10,6 +10,7 @@ on:
       - feature/v4-lawnchair-edition
       - feature/v4.2-rumb-own
       - feature/v4.3-styles
+      - fix/v4.3.1-drawer-theme
     paths:
       - "lawnchair-edition/**"
       - ".github/workflows/build-rumb-lawnchair.yml"
@@ -32,11 +33,11 @@ env:
   # Lawnchair 16-dev at 8429fbe (30 Oct 2026): newest upstream fixes and Android 16 support.
   # Upstream CI built and published this exact commit successfully.
   LAWNCHAIR_REF: 8429fbe09dca7a5e087916710ac0535d3fd948bb
-  RUMB_VERSION_NAME: "Rumb 4.3.0"
+  RUMB_VERSION_NAME: "Rumb 4.3.1"
   # Must increase every release. Upstream is 1600020100; Rumb adds its own patch number.
-  RUMB_VERSION_CODE: "1600020120"
-  RELEASE_TAG: v4.3.0
-  RELEASE_TITLE: "Rumb Launcher 4.3.0"
+  RUMB_VERSION_CODE: "1600020130"
+  RELEASE_TAG: v4.3.1
+  RELEASE_TITLE: "Rumb Launcher 4.3.1"
 
 jobs:
   build:
