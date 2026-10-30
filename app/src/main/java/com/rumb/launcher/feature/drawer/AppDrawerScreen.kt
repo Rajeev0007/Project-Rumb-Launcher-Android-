@@ -86,7 +86,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -94,6 +97,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -112,7 +118,10 @@ import com.rumb.launcher.platform.icons.AppIconLoader
 import com.rumb.launcher.platform.widgets.InstalledWidgetProvider
 import com.rumb.launcher.platform.widgets.WidgetCatalogState
 import com.rumb.launcher.platform.widgets.WidgetPreviewLoader
+import com.rumb.launcher.ui.AppDragController
 import com.rumb.launcher.ui.components.AppTile
+import com.rumb.launcher.ui.components.rememberLaunchSourceTracker
+import com.rumb.launcher.ui.components.trackLaunchSource
 import com.rumb.launcher.ui.components.visualTokens
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -147,9 +156,12 @@ fun AppDrawerScreen(
     onRequestWidgetProvider: (String) -> Unit,
     onWebSearch: (String) -> Unit,
     onStoreSearch: (String) -> Unit,
+    dragController: AppDragController,
+    onDragToHomeStarted: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tokens = visualTokens(state.settings.visualStyle)
+    val dragActive = dragController.isDragging
     var selectedTab by rememberSaveable { mutableStateOf(LibraryTab.APPS) }
     var ascending by rememberSaveable { mutableStateOf(true) }
     // The text field owns its text locally so typing never waits on the background search pipeline.
@@ -162,7 +174,13 @@ fun AppDrawerScreen(
     val currentOnSearchFocused by rememberUpdatedState(onSearchFocused)
     val wantsFocus = focusSearch || state.settings.drawerAutoKeyboard
 
-    LaunchedEffect(isOpen, wantsFocus) {
+    LaunchedEffect(isOpen, wantsFocus, dragActive) {
+        if (!isOpen && dragActive) {
+            // The dragged tile must stay composed until the drop, so only dismiss the keyboard now.
+            focusManager.clearFocus(force = true)
+            keyboard?.hide()
+            return@LaunchedEffect
+        }
         if (isOpen) {
             if (wantsFocus) {
                 selectedTab = LibraryTab.APPS
@@ -257,6 +275,8 @@ fun AppDrawerScreen(
                         onLongPress = onLongPress,
                         onWebSearch = onWebSearch,
                         onStoreSearch = onStoreSearch,
+                        dragController = dragController,
+                        onDragToHomeStarted = onDragToHomeStarted,
                     )
                 } else {
                     WidgetsLibrary(
@@ -309,8 +329,22 @@ private fun AppsLibrary(
     onLongPress: (InstalledApp) -> Unit,
     onWebSearch: (String) -> Unit,
     onStoreSearch: (String) -> Unit,
+    dragController: AppDragController,
+    onDragToHomeStarted: () -> Unit,
 ) {
     val searching = query.isNotBlank()
+    val tileConfig = LibraryTileConfig(
+        iconLoader = iconLoader,
+        iconSize = state.settings.iconSize.dp,
+        appearance = state.settings.iconAppearance,
+        badges = state.badges,
+        canDrag = !state.settings.layoutLocked,
+        haptics = state.settings.haptics,
+        dragController = dragController,
+        onLaunch = onLaunch,
+        onMenu = onLongPress,
+        onDragStarted = onDragToHomeStarted,
+    )
     // Results come from the background pipeline; until it catches up with the typed query, keep the last list.
     val apps = remember(state.filteredApps, state.apps, ascending, searching) {
         when {
@@ -319,8 +353,6 @@ private fun AppsLibrary(
             else -> state.apps.asReversed()
         }
     }
-    val appearance = state.settings.iconAppearance
-    val iconSize = state.settings.iconSize.dp
 
     OutlinedTextField(
         value = query,
@@ -397,7 +429,7 @@ private fun AppsLibrary(
                     if (suggestions.isNotEmpty()) {
                         sectionHeader("header:suggested", "Suggested")
                         items(suggestions, key = { "suggested:${it.id.stableKey}" }, contentType = { "app" }) { app ->
-                            LibraryTile(app, iconLoader, iconSize, appearance, onLaunch, onLongPress)
+                            LibraryTile(app, tileConfig)
                         }
                         sectionHeader("header:all", "All apps")
                     }
@@ -412,7 +444,7 @@ private fun AppsLibrary(
                         }
                     }
                     items(apps, key = { it.id.stableKey }, contentType = { "app" }) { app ->
-                        LibraryTile(app, iconLoader, iconSize, appearance, onLaunch, onLongPress)
+                        LibraryTile(app, tileConfig)
                     }
                     if (searching) {
                         item(key = "action:web", span = { GridItemSpan(maxLineSpan) }, contentType = "action") {
@@ -450,25 +482,119 @@ private fun LazyGridScope.sectionHeader(key: String, title: String) {
     }
 }
 
+private class LibraryTileConfig(
+    val iconLoader: AppIconLoader,
+    val iconSize: androidx.compose.ui.unit.Dp,
+    val appearance: IconAppearance,
+    val badges: Set<String>,
+    val canDrag: Boolean,
+    val haptics: Boolean,
+    val dragController: AppDragController,
+    val onLaunch: (InstalledApp, LaunchSource?) -> Unit,
+    val onMenu: (InstalledApp) -> Unit,
+    val onDragStarted: () -> Unit,
+)
+
+private enum class TilePress { TAP, CANCEL }
+
+/** Holds the tile's layout coordinates so pointer positions can be mapped to root space. */
+private class TileCoordinates {
+    var value: LayoutCoordinates? = null
+}
+
+/**
+ * Tap opens. Long-press and release opens the app sheet. Long-press and move lifts the app out of
+ * the library: the sheet slides away and the app follows the finger until it is dropped on Home.
+ */
 @Composable
-private fun LibraryTile(
-    app: InstalledApp,
-    iconLoader: AppIconLoader,
-    iconSize: androidx.compose.ui.unit.Dp,
-    appearance: IconAppearance,
-    onLaunch: (InstalledApp, LaunchSource?) -> Unit,
-    onLongPress: (InstalledApp) -> Unit,
-) {
-    AppTile(
-        app = app,
-        iconLoader = iconLoader,
-        iconSize = iconSize,
-        appearance = appearance,
-        labelColor = Color.White,
-        labelShadow = false,
-        onClick = { source -> onLaunch(app, source) },
-        onLongClick = { onLongPress(app) },
-    )
+private fun LibraryTile(app: InstalledApp, config: LibraryTileConfig) {
+    val haptics = LocalHapticFeedback.current
+    val tracker = rememberLaunchSourceTracker()
+    val coordinates = remember { TileCoordinates() }
+    var pressed by remember { mutableStateOf(false) }
+    val currentApp by rememberUpdatedState(app)
+    val currentConfig by rememberUpdatedState(config)
+    Box(
+        Modifier.onPlaced { coordinates.value = it }
+            .trackLaunchSource(tracker)
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                onClick(label = "Open ${app.label}") { currentConfig.onLaunch(currentApp, tracker.source()); true }
+                onLongClick(label = "More options") { currentConfig.onMenu(currentApp); true }
+            }
+            .pointerInput(app.id) {
+                fun toRoot(local: Offset): Offset =
+                    coordinates.value?.takeIf { it.isAttached }?.localToRoot(local) ?: local
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    pressed = true
+                    val outcome = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                        var result = TilePress.CANCEL
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                change.consume()
+                                result = TilePress.TAP
+                                break
+                            }
+                            val moved = (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                            if (change.isConsumed || moved || event.changes.count { it.pressed } > 1) break
+                        }
+                        result
+                    }
+                    pressed = false
+                    when (outcome) {
+                        TilePress.TAP -> {
+                            currentConfig.onLaunch(currentApp, tracker.source())
+                            return@awaitEachGesture
+                        }
+                        TilePress.CANCEL -> return@awaitEachGesture
+                        null -> Unit
+                    }
+                    val config = currentConfig
+                    if (config.haptics) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    var dragging = false
+                    var finished = false
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            change.consume()
+                            if (!change.pressed) break
+                            if (!dragging && config.canDrag &&
+                                (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                            ) {
+                                dragging = true
+                                config.dragController.start(currentApp, toRoot(change.position))
+                                config.onDragStarted()
+                            }
+                            if (dragging) config.dragController.move(toRoot(change.position))
+                        }
+                        if (dragging) {
+                            config.dragController.drop()
+                            if (config.haptics) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        } else {
+                            config.onMenu(currentApp)
+                        }
+                        finished = true
+                    } finally {
+                        if (dragging && !finished) config.dragController.cancel()
+                    }
+                }
+            },
+    ) {
+        AppTile(
+            app = app,
+            iconLoader = config.iconLoader,
+            iconSize = config.iconSize,
+            appearance = config.appearance,
+            labelColor = Color.White,
+            labelShadow = false,
+            badged = app.badgeKey in config.badges,
+            pressed = pressed,
+        )
+    }
 }
 
 @Composable

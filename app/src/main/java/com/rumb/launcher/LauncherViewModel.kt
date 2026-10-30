@@ -32,6 +32,10 @@ import com.rumb.launcher.domain.rankApps
 import com.rumb.launcher.platform.SystemActions
 import com.rumb.launcher.platform.WidgetSelection
 import com.rumb.launcher.platform.apps.LaunchSource
+import com.rumb.launcher.platform.apps.PackageRemoval
+import com.rumb.launcher.platform.lock.LockScreenService
+import com.rumb.launcher.platform.notifications.NotificationBadgeStore
+import com.rumb.launcher.platform.notifications.RumbNotificationListener
 import com.rumb.launcher.platform.apps.LauncherAppsCatalog
 import com.rumb.launcher.platform.icons.AppIconLoader
 import com.rumb.launcher.platform.icons.IconPack
@@ -87,12 +91,33 @@ class LauncherViewModel(context: Context) : ViewModel() {
         if (enabled) topSuggestions(lists.visible, usageMap) else emptyList()
     }
 
+    private val capabilities = MutableStateFlow(Capabilities())
+
+    private val badges = combine(
+        NotificationBadgeStore.badges,
+        repository.state.map { it.notificationDots }.distinctUntilChanged(),
+    ) { keys, enabled -> if (enabled) keys else emptySet() }
+
+    init {
+        // Keep the listener component in step with the setting; Android binds it only while enabled.
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.state.map { it.notificationDots }.distinctUntilChanged().collect { enabled ->
+                RumbNotificationListener.setEnabled(appContext, enabled)
+                refreshCapabilities()
+            }
+        }
+        viewModelScope.launch {
+            catalog.removals.collect { removal -> forgetUninstalled(removal) }
+        }
+    }
+
     private val data = combine(repository.state, catalog.state, appLists, searchResults, suggestions) {
             settings, catalogState, lists, results, suggested ->
         LauncherData(settings, catalogState, lists, results, suggested)
     }
 
-    val uiState: StateFlow<LauncherUiState> = combine(data, transient, iconPacks) { data, ui, packs ->
+    val uiState: StateFlow<LauncherUiState> = combine(data, transient, iconPacks, badges, capabilities) {
+            data, ui, packs, badgeKeys, caps ->
         LauncherUiState(
             settings = data.settings,
             catalog = data.catalog,
@@ -111,6 +136,9 @@ class LauncherViewModel(context: Context) : ViewModel() {
             message = ui.message,
             searchFocusRequested = ui.searchFocusRequested,
             iconPacks = packs,
+            badges = badgeKeys,
+            notificationAccess = caps.notificationAccess,
+            lockServiceConnected = caps.lockServiceConnected,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, LauncherUiState())
 
@@ -157,6 +185,143 @@ class LauncherViewModel(context: Context) : ViewModel() {
     }
 
     fun onMemoryPressure() = iconLoader.trim()
+
+    /** Re-reads special-access grants, which the user changes in system Settings. */
+    fun refreshCapabilities() {
+        capabilities.value = Capabilities(
+            notificationAccess = runCatching { RumbNotificationListener.hasAccess(appContext) }.getOrDefault(false),
+            lockServiceConnected = LockScreenService.isConnected,
+        )
+    }
+
+    fun updateNotificationDots(value: Boolean) {
+        update { it.copy(notificationDots = value) }
+        if (value && !RumbNotificationListener.hasAccess(appContext)) {
+            showMessage("Allow notification access for Rumb to show dots")
+            openNotificationAccess()
+        }
+    }
+
+    fun openNotificationAccess() = systemActions.openNotificationAccess(RumbNotificationListener.component(appContext))
+    fun openAccessibilitySettings() = systemActions.openAccessibilitySettings()
+
+    fun uninstall(app: InstalledApp) {
+        when {
+            app.isSystemApp -> showMessage("${app.label} is part of the system and can't be uninstalled")
+            app.isWorkProfile -> {
+                // Uninstalling inside another profile needs that profile's installer; App info handles it.
+                showMessage("Use App info to uninstall work apps")
+                systemActions.openAppInfo(app)
+            }
+            else -> systemActions.uninstall(app.packageName)
+        }
+    }
+
+    private fun lockScreen() {
+        if (LockScreenService.lockScreen()) return
+        if (!LockScreenService.isSupported) {
+            showMessage("Locking the screen from Home needs Android 9 or newer")
+        } else {
+            showMessage("Turn on “Rumb screen lock” in Accessibility settings to lock with a gesture")
+            openAccessibilitySettings()
+        }
+    }
+
+    /** Drops an app dragged from the library onto a Home cell, grouping with an app or folder already there. */
+    fun dropAppOnHome(app: InstalledApp, page: Int, cell: Int) = repository.update { state ->
+        if (state.layoutLocked) {
+            showMessage("Unlock the home layout before adding apps")
+            return@update state
+        }
+        val safePage = page.coerceIn(0, state.pageCount - 1)
+        val existing = state.homeItems.firstOrNull { it.type == HomeItemType.APP && it.appIds.firstOrNull() == app.id }
+        val items = if (existing != null) state.homeItems - existing else state.homeItems
+        val occupant = items.firstOrNull { it.page == safePage && cell in occupiedCells(it, state.columns, state.rows) }
+        when {
+            existing != null && existing.page == safePage && existing.cell == cell -> state
+            occupant == null -> state.copy(
+                homeItems = items + HomeItem(
+                    id = existing?.id ?: UUID.randomUUID().toString(),
+                    type = HomeItemType.APP,
+                    page = safePage,
+                    cell = cell,
+                    appIds = listOf(app.id),
+                ),
+            )
+            occupant.type == HomeItemType.APP && occupant.cell == cell -> state.copy(
+                homeItems = items.filterNot { it.id == occupant.id } + HomeItem(
+                    id = UUID.randomUUID().toString(),
+                    type = HomeItemType.FOLDER,
+                    page = safePage,
+                    cell = cell,
+                    title = "Folder",
+                    appIds = (occupant.appIds + app.id).distinctBy(AppId::stableKey),
+                ),
+            )
+            occupant.type == HomeItemType.FOLDER && occupant.cell == cell -> when {
+                app.id in occupant.appIds -> {
+                    showMessage("${app.label} is already in ${occupant.title}")
+                    state
+                }
+                occupant.appIds.size >= 24 -> {
+                    showMessage("Folders can hold up to 24 apps")
+                    state
+                }
+                else -> state.copy(homeItems = items.map {
+                    if (it.id == occupant.id) it.copy(appIds = it.appIds + app.id) else it
+                })
+            }
+            else -> {
+                val placement = findFreePlacement(items, state.columns, state.rows, 9, preferredPage = safePage)
+                if (placement == null) {
+                    showMessage("All nine home pages are full")
+                    state
+                } else {
+                    showMessage("That spot is taken, so ${app.label} went to the nearest free space")
+                    state.copy(
+                        pageCount = maxOf(state.pageCount, placement.page + 1),
+                        homeItems = items + HomeItem(
+                            id = existing?.id ?: UUID.randomUUID().toString(),
+                            type = HomeItemType.APP,
+                            page = placement.page,
+                            cell = placement.cell,
+                            appIds = listOf(app.id),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun addToDock(app: InstalledApp) = repository.update { state ->
+        when {
+            state.layoutLocked -> {
+                showMessage("Unlock the home layout before changing the dock")
+                state
+            }
+            app.id in state.dockApps -> state
+            state.dockApps.size >= 5 -> {
+                showMessage("The dock can hold up to five apps")
+                state
+            }
+            else -> state.copy(dockApps = state.dockApps + app.id, homeItems = removeAppFromHome(state.homeItems, app.id))
+        }
+    }
+
+    private fun forgetUninstalled(removal: PackageRemoval) = repository.update { state ->
+        fun matches(id: AppId) = id.profileSerial == removal.profileSerial &&
+            id.component.substringBefore('/') == removal.packageName
+        val removed = (state.homeItems.flatMap(HomeItem::appIds) + state.dockApps + state.hiddenApps).filter(::matches).toSet()
+        if (removed.isEmpty()) return@update state
+        var items = state.homeItems
+        removed.forEach { items = removeAppFromHome(items, it) }
+        state.copy(
+            homeItems = items,
+            dockApps = state.dockApps.filterNot(::matches),
+            hiddenApps = state.hiddenApps.filterNot(::matches).toSet(),
+            customLabels = state.customLabels.filterKeys { !matches(it) },
+        )
+    }
 
     fun refreshIconPacks() {
         viewModelScope.launch(Dispatchers.Default) {
@@ -417,15 +582,24 @@ class LauncherViewModel(context: Context) : ViewModel() {
     fun updateClockSize(value: Int) = update { it.copy(clockSize = value) }
     fun updateShowDate(value: Boolean) = update { it.copy(showDate = value) }
     fun updateShowSeconds(value: Boolean) = update { it.copy(showSeconds = value) }
-    fun updateSwipeUp(value: GestureAction) = update { it.copy(swipeUpAction = value) }
-    fun updateSwipeDown(value: GestureAction) = update { it.copy(swipeDownAction = value) }
-    fun updateDoubleTap(value: GestureAction) = update { it.copy(doubleTapAction = value) }
-    fun updatePinch(value: GestureAction) = update { it.copy(pinchAction = value) }
+    fun updateSwipeUp(value: GestureAction) = updateGesture(value) { copy(swipeUpAction = value) }
+    fun updateSwipeDown(value: GestureAction) = updateGesture(value) { copy(swipeDownAction = value) }
+    fun updateDoubleTap(value: GestureAction) = updateGesture(value) { copy(doubleTapAction = value) }
+    fun updatePinch(value: GestureAction) = updateGesture(value) { copy(pinchAction = value) }
     fun updateShowHomeLabels(value: Boolean) = update { it.copy(showHomeLabels = value) }
     fun updateHomeSearchBar(value: Boolean) = update { it.copy(homeSearchBar = value) }
     fun updateDrawerSuggestions(value: Boolean) = update { it.copy(drawerSuggestions = value) }
     fun updateDrawerAutoKeyboard(value: Boolean) = update { it.copy(drawerAutoKeyboard = value) }
     fun updateHaptics(value: Boolean) = update { it.copy(haptics = value) }
+    private fun updateGesture(value: GestureAction, transform: LauncherSettings.() -> LauncherSettings) {
+        update { it.transform() }
+        if (value == GestureAction.LOCK_SCREEN && !LockScreenService.isConnected) lockScreenHint()
+    }
+
+    private fun lockScreenHint() {
+        if (!LockScreenService.isSupported) showMessage("Locking the screen from Home needs Android 9 or newer")
+        else showMessage("Turn on “Rumb screen lock” in Accessibility settings to use this gesture")
+    }
 
     fun performGesture(action: GestureAction) {
         when (action) {
@@ -434,6 +608,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
             GestureAction.OPEN_SEARCH -> openSearch()
             GestureAction.OPEN_QUICK_PANEL -> navigate(Destination.QUICK_PANEL)
             GestureAction.OPEN_SETTINGS -> navigate(Destination.SETTINGS)
+            GestureAction.LOCK_SCREEN -> lockScreen()
             GestureAction.LOCK_LAYOUT -> {
                 val locked = !repository.state.value.layoutLocked
                 updateLayoutLocked(locked)
@@ -534,6 +709,10 @@ private data class LauncherData(
     val results: SearchResults,
     val suggestions: List<InstalledApp>,
 )
+private data class Capabilities(
+    val notificationAccess: Boolean = false,
+    val lockServiceConnected: Boolean = false,
+)
 private data class TransientState(
     val destination: Destination = Destination.HOME,
     val selectedAppId: AppId? = null,
@@ -564,4 +743,8 @@ data class LauncherUiState(
     val message: String? = null,
     val searchFocusRequested: Boolean = false,
     val iconPacks: List<IconPack> = emptyList(),
+    /** Badge keys ([InstalledApp.badgeKey]) with notification dots; empty when dots are off. */
+    val badges: Set<String> = emptySet(),
+    val notificationAccess: Boolean = false,
+    val lockServiceConnected: Boolean = false,
 )

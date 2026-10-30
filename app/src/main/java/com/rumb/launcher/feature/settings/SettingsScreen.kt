@@ -86,6 +86,11 @@ fun SettingsScreen(
     onDoubleTap: (GestureAction) -> Unit,
     onPinch: (GestureAction) -> Unit,
     onHaptics: (Boolean) -> Unit,
+    notificationAccess: Boolean,
+    lockServiceConnected: Boolean,
+    onNotificationDots: (Boolean) -> Unit,
+    onOpenNotificationAccess: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
     onHomeSettings: () -> Unit,
     onWallpaper: () -> Unit,
     onExport: () -> Unit,
@@ -163,6 +168,22 @@ fun SettingsScreen(
                     Choices((1..9).toList(), settings.pageCount, Int::toString, onPages)
                     Toggle("Show app labels", "Names under Home apps and folders", settings.showHomeLabels, onShowHomeLabels, true, tokens)
                     Toggle("Search bar", "A search pill above the dock", settings.homeSearchBar, onHomeSearchBar, true, tokens)
+                    Toggle(
+                        "Notification dots",
+                        "Shows a dot on apps with unread notifications. Rumb reads only which app posted, never the content.",
+                        settings.notificationDots,
+                        onNotificationDots,
+                        true,
+                        tokens,
+                    )
+                    if (settings.notificationDots && !notificationAccess) {
+                        AccessNotice(
+                            text = "Notification access is off, so no dots are shown." + RESTRICTED_SETTINGS_HINT,
+                            action = "Allow notification access",
+                            tokens = tokens,
+                            onClick = onOpenNotificationAccess,
+                        )
+                    }
                     Toggle("Lock layout", "Prevents moving, combining, adding, removing, and editing home items", settings.layoutLocked, onLayoutLock, true, tokens)
                     if (hiddenAppCount > 0) OutlinedButton(onClick = onUnhideAll, Modifier.fillMaxWidth()) {
                         Text("Restore $hiddenAppCount hidden ${if (hiddenAppCount == 1) "app" else "apps"}")
@@ -225,6 +246,33 @@ fun SettingsScreen(
                     Label("Pinch", tokens.foreground)
                     Choices(supportedGestureActions, settings.pinchAction, { it.label() }, onPinch)
                     Toggle("Haptic feedback", "Vibration on long press, drag, and index scrubbing", settings.haptics, onHaptics, true, tokens)
+                    val usesLockScreen = listOf(
+                        settings.swipeUpAction,
+                        settings.swipeDownAction,
+                        settings.doubleTapAction,
+                        settings.pinchAction,
+                    ).contains(GestureAction.LOCK_SCREEN)
+                    if (usesLockScreen) {
+                        when {
+                            Build.VERSION.SDK_INT < Build.VERSION_CODES.P -> Text(
+                                "Lock screen needs Android 9 or newer.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = tokens.mutedForeground,
+                            )
+                            !lockServiceConnected -> AccessNotice(
+                                text = "Turn on “Rumb screen lock” in Accessibility. It can only lock the screen; it reads no screen content." +
+                                    RESTRICTED_SETTINGS_HINT,
+                                action = "Open Accessibility settings",
+                                tokens = tokens,
+                                onClick = onOpenAccessibilitySettings,
+                            )
+                            else -> Text(
+                                "Screen lock gesture is ready.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = tokens.mutedForeground,
+                            )
+                        }
+                    }
                     Text(
                         "Pinch requires two pointers. Long-press only activates customization on unconsumed empty Home space. Rumb never replaces Android's secure lock screen.",
                         style = MaterialTheme.typography.bodySmall,
@@ -262,6 +310,22 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+}
+
+private const val RESTRICTED_SETTINGS_HINT =
+    " If Android says the setting is restricted, open App info for Rumb, tap ⋮, and choose Allow restricted settings."
+
+@Composable
+private fun AccessNotice(
+    text: String,
+    action: String,
+    tokens: com.rumb.launcher.ui.components.VisualTokens,
+    onClick: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(text, style = MaterialTheme.typography.bodySmall, color = tokens.mutedForeground)
+        FilledTonalButton(onClick = onClick, modifier = Modifier.padding(top = 6.dp)) { Text(action) }
     }
 }
 
@@ -328,4 +392,5 @@ private fun GestureAction.label() = when (this) {
     GestureAction.OPEN_QUICK_PANEL -> "Quick panel"
     GestureAction.OPEN_SETTINGS -> "Settings"
     GestureAction.LOCK_LAYOUT -> "Toggle layout lock"
+    GestureAction.LOCK_SCREEN -> "Lock screen"
 }

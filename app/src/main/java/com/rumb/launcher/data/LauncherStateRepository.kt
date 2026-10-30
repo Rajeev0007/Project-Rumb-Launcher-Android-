@@ -261,6 +261,7 @@ class LauncherStateRepository(context: Context) {
         put("drawerSuggestions", value.drawerSuggestions)
         put("drawerAutoKeyboard", value.drawerAutoKeyboard)
         put("haptics", value.haptics)
+        put("notificationDots", value.notificationDots)
         put("customLabels", JSONArray().apply {
             value.customLabels.forEach { (id, label) ->
                 put(JSONObject().put("app", encodeId(id, portableIds)).put("label", label))
@@ -339,6 +340,7 @@ class LauncherStateRepository(context: Context) {
                 drawerSuggestions = json.optBoolean("drawerSuggestions", true),
                 drawerAutoKeyboard = json.optBoolean("drawerAutoKeyboard", false),
                 haptics = json.optBoolean("haptics", true),
+                notificationDots = json.optBoolean("notificationDots", false),
                 customLabels = json.optJSONArray("customLabels").objects().mapNotNull { entry ->
                     val id = parseStoredId(entry.optString("app")) ?: return@mapNotNull null
                     entry.optString("label").trim().take(MAX_LABEL_LENGTH).takeIf(String::isNotEmpty)?.let { id to it }

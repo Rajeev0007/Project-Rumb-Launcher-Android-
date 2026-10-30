@@ -72,6 +72,7 @@ import kotlinx.coroutines.launch
 
 private val SheetColor = Color(0xFF141416)
 private val SheetCard = Color(0xFF1E1E21)
+private val UninstallColor = Color(0xFFFF8A8A)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,6 +92,7 @@ fun AppActionsSheet(
     onInfo: () -> Unit,
     onShortcut: (AppShortcut) -> Unit,
     onRename: (String) -> Unit,
+    onUninstall: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -192,6 +194,18 @@ fun AppActionsSheet(
                 SheetAction(Icons.Default.VisibilityOff, "Hide", accent) { closeThen(onHide) }
                 SheetAction(Icons.Default.Info, "App info", accent) { closeThen(onInfo) }
             }
+            if (!app.isSystemApp) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(18.dp)).background(SheetCard)
+                        .clickable(role = Role.Button, onClickLabel = "Uninstall ${app.label}") { closeThen(onUninstall) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, tint = UninstallColor, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Text("Uninstall", color = UninstallColor, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
         }
     }
 }
@@ -225,6 +239,7 @@ fun FolderDialog(
     appearance: IconAppearance,
     accent: Color,
     editable: Boolean,
+    badges: Set<String>,
     onDismiss: () -> Unit,
     onLaunch: (InstalledApp, LaunchSource?) -> Unit,
     onRename: (String) -> Unit,
@@ -312,6 +327,7 @@ fun FolderDialog(
                                             appearance = appearance,
                                             labelColor = Color.White,
                                             labelShadow = false,
+                                            badged = app.badgeKey in badges,
                                             modifier = Modifier.fillMaxWidth(),
                                             onClick = { source -> if (!editing) onLaunch(app, source) },
                                         )

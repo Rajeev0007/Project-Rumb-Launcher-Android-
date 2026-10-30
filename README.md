@@ -1,6 +1,17 @@
-# Rumb Launcher Next 3.1.0
+# Rumb Launcher Next 3.2.0
 
 Rumb Launcher Next is a private, offline Android home-screen replacement built with native Kotlin and Jetpack Compose. V3 uses the supplied screenshots only as structural reference for a new AMOLED-first library, wallpaper-first Home, and safe quick-control launcher. Its surfaces, geometry, color treatment, and artwork are original rather than copies of another launcher or vendor interface. Android 8.0 (API 26) and newer are supported.
+
+## What's new in 3.2
+
+- **Drag apps from the library onto Home.** Long-press an app in Apps and start moving: the library slides away and the icon follows your finger. Drop it on an empty cell, on an app (makes a folder), on a folder (adds to it), or on the dock. Hold near the left or right edge to move between pages. Long-press and release still opens the app sheet.
+- **Notification dots** (opt-in). Turn them on in Settings → Home layout and allow notification access. Apps, folders, and dock icons show a dot while they have a notification that Android allows to badge. Group summaries and ongoing notifications (music, downloads, foreground services) are skipped.
+- **Uninstall** from the app sheet. Android shows its own confirmation. System apps don't offer it, and work-profile apps open App info instead. Uninstalled apps are now removed from Home, folders, the dock, hidden apps, and custom names automatically.
+- **Lock screen gesture** (Android 9+, opt-in). Choose "Lock screen" for double tap, swipe, or pinch, then turn on "Rumb screen lock" in Accessibility settings.
+
+On Android 13 and newer, Android may block notification access and accessibility for apps installed outside an app store and show "Restricted setting". To allow it, open App info for Rumb Launcher Next, tap ⋮, choose **Allow restricted settings**, then turn the access on again.
+
+The backup schema is now version 7 and includes the notification-dots choice.
 
 ## What's new in 3.1
 
@@ -35,7 +46,7 @@ V3 installs as **Rumb Launcher Next** with application ID `com.rumb.launcher.nex
 
 Android refuses to update an installed package when the incoming APK has the same application ID but a different signing certificate. That commonly appears as an app-not-installed or package-conflict error. Giving V3 a new application ID lets it install beside an older `com.rumb.launcher` build, including an old differently signed debug APK. Android treats the two IDs as separate apps, so select **Rumb Launcher Next** again in the system Home chooser. Private app data does not transfer automatically between package IDs; use Rumb's explicit JSON export/import where the older build supports it.
 
-The Play Protect screenshot concerns the **old v2.0.1 debug APK**, with its old package identity and debug signing context. The current deliverable is **V3.1.0** (`versionCode 8`) under `com.rumb.launcher.next`. A locally built debug APK is still debug-signed; the hardened release is the unminified release variant signed only when all four release-signing variables are supplied. Package identity and release signing distinguish the current release from the old debug artifact, but no project can promise how Play Protect or an OEM scanner will classify a sideloaded APK.
+The Play Protect screenshot concerns the **old v2.0.1 debug APK**, with its old package identity and debug signing context. The current deliverable is **V3.2.0** (`versionCode 9`) under `com.rumb.launcher.next`. A locally built debug APK is still debug-signed; the hardened release is the unminified release variant signed only when all four release-signing variables are supplied. Package identity and release signing distinguish the current release from the old debug artifact, but no project can promise how Play Protect or an OEM scanner will classify a sideloaded APK.
 
 ## V3 Home
 
@@ -98,13 +109,19 @@ The customization tray still provides live style previews, Android's wallpaper p
 - Versioned JSON export and validated import through Android's Storage Access Framework
 - Legacy favorites/settings migration and strict normalization of imported or persisted layouts
 
-## Hardened capability posture
+## Capability posture
 
-Rumb requests **no permissions**. In particular, the manifest has no `INTERNET`, broad storage, notification-listener, package-removal, Bluetooth, location, or settings-write permission. There is no notification-listener service and no `ACTION_DELETE` uninstall path. The app contains no analytics, advertising, or account system.
+Rumb has **no internet permission**, analytics, advertising, or accounts. Optional capabilities stay off until you turn them on, and each one does one job:
 
-Cleartext traffic and automatic Android backup are disabled. Explicit JSON imports are capped at 1 MB and validated before state replacement. Portable backups use profile roles instead of device-local serials and exclude widget IDs. The release build keeps code and resources unminified and unshrunk. Release signing is enabled only when `RUMB_KEYSTORE_PATH`, `RUMB_KEYSTORE_PASSWORD`, `RUMB_KEY_ALIAS`, and `RUMB_KEY_PASSWORD` are all configured; partial signing configuration fails the build without logging credentials.
+| Capability | Why | What it can access |
+| --- | --- | --- |
+| `REQUEST_DELETE_PACKAGES` (normal permission) | Uninstall from the app sheet | Can only *ask*; Android shows its own confirmation every time |
+| Notification listener (`RumbNotificationListener`) | Notification dots | Disabled in the manifest until you enable dots, and you must also grant notification access. Reads only the posting package, profile, notification flags, and Android's "can show badge" ranking. Titles, text, extras, and actions are never read or stored. |
+| Accessibility service (`LockScreenService`) | "Lock screen" gesture on Android 9+ | Subscribes to no accessibility events and cannot retrieve window content. It only calls Android's public lock-screen global action. |
 
-These choices reduce sensitive capability surface and common sideloading concerns. Play Protect and OEM security products can still inspect or warn about apps installed outside their stores.
+There is still no broad storage, Bluetooth, location, or settings-write permission. Cleartext traffic and automatic Android backup are disabled. Explicit JSON imports are capped at 1 MB and validated before state replacement. Portable backups use profile roles instead of device-local serials and exclude widget IDs. The release build keeps code and resources unminified and unshrunk. Release signing is enabled only when `RUMB_KEYSTORE_PATH`, `RUMB_KEYSTORE_PASSWORD`, `RUMB_KEY_ALIAS`, and `RUMB_KEY_PASSWORD` are all configured; partial signing configuration fails the build without logging credentials.
+
+Sideloaded apps that declare a notification listener or an accessibility service can get extra scrutiny from Play Protect or OEM security tools. Both stay inactive until you grant access in system Settings, and no project can promise how a scanner will classify a sideloaded APK.
 
 ## Using the launcher
 
@@ -113,7 +130,7 @@ These choices reduce sensitive capability surface and common sideloading concern
 3. Swipe up on empty Home space to open the Apps/Widgets library.
 4. Swipe down on fresh V3 state to open Quick Panel.
 5. Long-press empty Home space to open customization.
-6. Long-press an app in Apps to add it to Home or the dock, hide it, open App info, or use a shortcut.
+6. Long-press an app in Apps and release to add it to Home or the dock, rename, hide, uninstall, open App info, or use a shortcut. Long-press and drag to place it on Home.
 7. Open Widgets and select a provider card, or choose System picker. Android owns binding approval and provider configuration.
 8. Unlock the layout before moving, combining, adding, or removing Home items.
 

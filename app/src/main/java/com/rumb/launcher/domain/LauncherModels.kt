@@ -21,7 +21,13 @@ data class InstalledApp(
     val activityName: String,
     val profileLabel: String? = null,
     val isWorkProfile: Boolean = false,
-)
+    val isSystemApp: Boolean = false,
+) {
+    /** Matches notification badges, which Android reports per package and profile. */
+    val badgeKey: String get() = notificationBadgeKey(id.profileSerial, packageName)
+}
+
+fun notificationBadgeKey(profileSerial: Long, packageName: String): String = "$profileSerial|$packageName"
 
 data class AppShortcut(
     val id: String,
@@ -37,7 +43,7 @@ enum class ClockStyle { HIDDEN, LARGE, COMPACT, MINIMAL }
 enum class ClockAlignment { LEFT, CENTER, RIGHT }
 enum class ClockTimeFormat { SYSTEM, TWELVE_HOUR, TWENTY_FOUR_HOUR }
 enum class ClockFont { SANS, SERIF, MONOSPACE }
-enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SEARCH, OPEN_QUICK_PANEL, OPEN_SETTINGS, LOCK_LAYOUT }
+enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SEARCH, OPEN_QUICK_PANEL, OPEN_SETTINGS, LOCK_LAYOUT, LOCK_SCREEN }
 enum class HomeItemType { APP, FOLDER, WIDGET }
 
 data class HomeItem(
@@ -86,8 +92,9 @@ data class LauncherSettings(
     val drawerAutoKeyboard: Boolean = false,
     val haptics: Boolean = true,
     val customLabels: Map<AppId, String> = emptyMap(),
+    val notificationDots: Boolean = false,
 ) {
-    companion object { const val CURRENT_SCHEMA = 6 }
+    companion object { const val CURRENT_SCHEMA = 7 }
 }
 
 /** Everything that changes how an app icon bitmap is produced. Used as a cache and recomposition key. */
