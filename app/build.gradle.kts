@@ -29,8 +29,8 @@ android {
         applicationId = "com.rumb.launcher.next"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "3.2.0"
+        versionCode = 10
+        versionName = "3.3.0"
     }
 
     buildFeatures {

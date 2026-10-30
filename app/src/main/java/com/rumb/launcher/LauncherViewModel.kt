@@ -1,6 +1,8 @@
 package com.rumb.launcher
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -139,6 +141,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
             badges = badgeKeys,
             notificationAccess = caps.notificationAccess,
             lockServiceConnected = caps.lockServiceConnected,
+            isDefaultLauncher = caps.isDefaultLauncher,
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, LauncherUiState())
 
@@ -191,7 +194,20 @@ class LauncherViewModel(context: Context) : ViewModel() {
         capabilities.value = Capabilities(
             notificationAccess = runCatching { RumbNotificationListener.hasAccess(appContext) }.getOrDefault(false),
             lockServiceConnected = LockScreenService.isConnected,
+            isDefaultLauncher = isDefaultLauncher(),
         )
+    }
+
+    private fun isDefaultLauncher(): Boolean = runCatching {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        @Suppress("DEPRECATION")
+        val resolved = appContext.packageManager.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)
+        resolved?.activityInfo?.packageName == appContext.packageName
+    }.getOrDefault(false)
+
+    /** Unhiding never changes the layout, so it is allowed even while the layout is locked. */
+    fun unhide(appId: AppId) = update { state ->
+        if (appId in state.hiddenApps) state.copy(hiddenApps = state.hiddenApps - appId) else state
     }
 
     fun updateNotificationDots(value: Boolean) {
@@ -712,6 +728,7 @@ private data class LauncherData(
 private data class Capabilities(
     val notificationAccess: Boolean = false,
     val lockServiceConnected: Boolean = false,
+    val isDefaultLauncher: Boolean = true,
 )
 private data class TransientState(
     val destination: Destination = Destination.HOME,
@@ -747,4 +764,5 @@ data class LauncherUiState(
     val badges: Set<String> = emptySet(),
     val notificationAccess: Boolean = false,
     val lockServiceConnected: Boolean = false,
+    val isDefaultLauncher: Boolean = true,
 )

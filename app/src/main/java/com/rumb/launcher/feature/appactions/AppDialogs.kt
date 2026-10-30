@@ -36,7 +36,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -70,9 +69,7 @@ import com.rumb.launcher.ui.components.AppIconImage
 import com.rumb.launcher.ui.components.AppTile
 import kotlinx.coroutines.launch
 
-private val SheetColor = Color(0xFF141416)
-private val SheetCard = Color(0xFF1E1E21)
-private val UninstallColor = Color(0xFFFF8A8A)
+private val UninstallColor = Color(0xFFE5484D)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,11 +102,12 @@ fun AppActionsSheet(
         }
     }
 
+    val colors = MaterialTheme.colorScheme
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = SheetColor,
-        contentColor = Color.White,
+        containerColor = colors.surfaceContainerLow,
+        contentColor = colors.onSurface,
     ) {
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -126,7 +124,7 @@ fun AppActionsSheet(
                     Text(
                         listOfNotNull(app.packageName, app.profileLabel?.let { "$it profile" }).joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(.55f),
+                        color = colors.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -142,20 +140,13 @@ fun AppActionsSheet(
                     label = { Text("App name") },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onRename(name); renaming = false }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = accent,
-                        cursorColor = accent,
-                        focusedLabelColor = accent,
-                    ),
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     if (hasCustomLabel) TextButton(onClick = { onRename(""); renaming = false }) {
-                        Text("Use original name", color = Color.White.copy(.75f))
+                        Text("Use original name")
                     }
                     TextButton(onClick = { onRename(name); renaming = false }, enabled = name.isNotBlank()) {
-                        Text("Save", color = accent)
+                        Text("Save")
                     }
                 }
             }
@@ -164,10 +155,10 @@ fun AppActionsSheet(
                 Text(
                     "Shortcuts",
                     style = MaterialTheme.typography.labelLarge,
-                    color = Color.White.copy(.6f),
-                    modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
+                    color = colors.primary,
+                    modifier = Modifier.padding(top = 18.dp, bottom = 6.dp, start = 4.dp),
                 )
-                Surface(color = SheetCard, shape = RoundedCornerShape(20.dp)) {
+                Surface(color = colors.surfaceContainerHigh, shape = RoundedCornerShape(20.dp)) {
                     Column {
                         shortcuts.take(5).forEach { shortcut ->
                             Row(
@@ -175,7 +166,7 @@ fun AppActionsSheet(
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(Icons.Default.Bolt, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.Bolt, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(14.dp))
                                 Text(shortcut.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
@@ -184,45 +175,52 @@ fun AppActionsSheet(
                 }
             }
 
-            Row(
-                Modifier.fillMaxWidth().padding(top = 18.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SheetAction(Icons.Default.PushPin, if (pinned) "Unpin" else "Add to Home", accent) { closeThen(onTogglePin) }
-                SheetAction(Icons.Default.Dock, if (docked) "Undock" else "Dock", accent) { closeThen(onToggleDock) }
-                SheetAction(Icons.Default.Edit, "Rename", accent) { renaming = !renaming }
-                SheetAction(Icons.Default.VisibilityOff, "Hide", accent) { closeThen(onHide) }
-                SheetAction(Icons.Default.Info, "App info", accent) { closeThen(onInfo) }
+            val actions = buildList {
+                add(SheetActionItem(Icons.Default.PushPin, if (pinned) "Remove from Home" else "Add to Home") { closeThen(onTogglePin) })
+                add(SheetActionItem(Icons.Default.Dock, if (docked) "Remove from dock" else "Add to dock") { closeThen(onToggleDock) })
+                add(SheetActionItem(Icons.Default.Edit, "Rename") { renaming = !renaming })
+                add(SheetActionItem(Icons.Default.VisibilityOff, "Hide") { closeThen(onHide) })
+                add(SheetActionItem(Icons.Default.Info, "App info") { closeThen(onInfo) })
+                if (!app.isSystemApp) add(SheetActionItem(Icons.Default.Delete, "Uninstall", destructive = true) { closeThen(onUninstall) })
             }
-            if (!app.isSystemApp) {
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(18.dp)).background(SheetCard)
-                        .clickable(role = Role.Button, onClickLabel = "Uninstall ${app.label}") { closeThen(onUninstall) }
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = null, tint = UninstallColor, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(14.dp))
-                    Text("Uninstall", color = UninstallColor, style = MaterialTheme.typography.bodyLarge)
+            Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                actions.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { SheetAction(it) }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
                 }
             }
         }
     }
 }
 
+private class SheetActionItem(
+    val icon: ImageVector,
+    val label: String,
+    val destructive: Boolean = false,
+    val onClick: () -> Unit,
+)
+
 @Composable
-private fun RowScope.SheetAction(icon: ImageVector, label: String, accent: Color, onClick: () -> Unit) {
+private fun RowScope.SheetAction(item: SheetActionItem) {
+    val colors = MaterialTheme.colorScheme
+    val tint = if (item.destructive) UninstallColor else colors.primary
     Column(
-        Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(SheetCard)
-            .clickable(role = Role.Button, onClick = onClick).padding(vertical = 12.dp, horizontal = 4.dp),
+        Modifier.weight(1f).heightIn(min = 84.dp).clip(RoundedCornerShape(20.dp)).background(colors.surfaceContainerHigh)
+            .clickable(role = Role.Button, onClick = item.onClick).padding(vertical = 14.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.size(6.dp))
+        Box(Modifier.size(36.dp).clip(CircleShape).background(tint.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
+            Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.size(8.dp))
         Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
+            item.label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (item.destructive) UninstallColor else colors.onSurface,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
@@ -258,9 +256,9 @@ fun FolderDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(30.dp),
-            color = SheetColor.copy(alpha = .97f),
-            contentColor = Color.White,
-            border = BorderStroke(1.dp, Color.White.copy(.1f)),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Column(Modifier.fillMaxWidth().padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -274,13 +272,6 @@ fun FolderDialog(
                             label = { Text("Folder name") },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = { finishEditing() }),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedBorderColor = accent,
-                                cursorColor = accent,
-                                focusedLabelColor = accent,
-                            ),
                         )
                     } else {
                         Text(
@@ -297,7 +288,7 @@ fun FolderDialog(
                             Icon(
                                 if (editing) Icons.Default.Check else Icons.Default.Edit,
                                 contentDescription = if (editing) "Finish editing folder" else "Edit folder",
-                                tint = accent,
+                                tint = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
@@ -305,7 +296,7 @@ fun FolderDialog(
                 if (entries.none { it.app != null }) {
                     Text(
                         "The apps in this folder are no longer available",
-                        color = Color.White.copy(.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 8.dp),
                     )
@@ -325,7 +316,7 @@ fun FolderDialog(
                                             iconLoader = iconLoader,
                                             iconSize = 50.dp,
                                             appearance = appearance,
-                                            labelColor = Color.White,
+                                            labelColor = MaterialTheme.colorScheme.onSurface,
                                             labelShadow = false,
                                             badged = app.badgeKey in badges,
                                             modifier = Modifier.fillMaxWidth(),
@@ -334,7 +325,7 @@ fun FolderDialog(
                                     } else {
                                         Text(
                                             entry.id.component.substringBefore('/').ifBlank { "Unavailable app" },
-                                            color = Color.White.copy(.5f),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             style = MaterialTheme.typography.labelSmall,
                                             maxLines = 2,
                                             textAlign = TextAlign.Center,
@@ -358,9 +349,9 @@ fun FolderDialog(
                 }
                 if (editing) {
                     TextButton(onClick = onRemove, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFFF8A8A))
+                        Icon(Icons.Default.Delete, contentDescription = null, tint = UninstallColor)
                         Spacer(Modifier.width(8.dp))
-                        Text("Remove folder from Home", color = Color(0xFFFF8A8A))
+                        Text("Remove folder from Home", color = UninstallColor)
                     }
                 }
             }
