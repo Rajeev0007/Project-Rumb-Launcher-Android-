@@ -10,6 +10,7 @@ on:
       - feature/reference-ui-install-fix
       - feature/v3.1-smooth-launcher
       - feature/v3.2-power-features
+      - feature/v3.3-settings-redesign
   pull_request:
     branches:
       - main
@@ -75,6 +76,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           case "$GITHUB_REF_NAME" in
+            feature/v3.3-settings-redesign)
+              TAG="v3.3.0"
+              TITLE="Rumb Launcher Next v3.3.0"
+              ;;
             feature/v3.2-power-features)
               TAG="v3.2.0"
               TITLE="Rumb Launcher Next v3.2.0"
