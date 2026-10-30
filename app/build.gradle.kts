@@ -29,8 +29,8 @@ android {
         applicationId = "com.rumb.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "2.2.0"
+        versionCode = 6
+        versionName = "2.2.1"
     }
 
     buildFeatures {
@@ -58,8 +58,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             releaseSigningConfig?.let { signingConfig = it }
         }

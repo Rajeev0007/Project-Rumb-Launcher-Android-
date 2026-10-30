@@ -6,6 +6,7 @@ on:
       - build/rumb-launcher
       - feature/rumb-launcher-v2
       - fix/release-security-hardening
+      - fix/full-release-apk
   pull_request:
     branches:
       - main
@@ -71,6 +72,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           case "$GITHUB_REF_NAME" in
+            fix/full-release-apk)
+              TAG="v2.2.1"
+              TITLE="Rumb Launcher v2.2.1 Full Release"
+              ;;
             fix/release-security-hardening)
               TAG="v2.2.0"
               TITLE="Rumb Launcher v2.2.0 Visual Redesign"
@@ -93,5 +98,5 @@ jobs:
             gh release create "$TAG" "$APK" "$APK.sha256" \
               --target "$GITHUB_SHA" \
               --title "$TITLE" \
-              --notes "Signed and minified standard release for Android 8.0 or newer. This edition has no network permission, notification-listener service, or direct uninstall capability."
+              --notes "Signed full release for Android 8.0 or newer. Code and resources are not minified or shrunk. This edition has no network permission, notification-listener service, or direct uninstall capability."
           fi
