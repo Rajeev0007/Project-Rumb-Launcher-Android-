@@ -45,6 +45,7 @@ import com.rumb.launcher.domain.LauncherSettings
 import com.rumb.launcher.domain.ThemePreference
 import com.rumb.launcher.domain.VisualStyle
 import com.rumb.launcher.feature.customize.VisualStylePreview
+import com.rumb.launcher.platform.icons.IconPack
 import com.rumb.launcher.ui.components.VisualBackdrop
 import com.rumb.launcher.ui.components.VisualSurface
 import com.rumb.launcher.ui.components.visualTokens
@@ -52,20 +53,27 @@ import com.rumb.launcher.ui.components.visualTokens
 @Composable
 fun SettingsScreen(
     settings: LauncherSettings,
+    iconPacks: List<IconPack>,
     onBack: () -> Unit,
     onVisualStyle: (VisualStyle) -> Unit,
     onTheme: (ThemePreference) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
     onIconShape: (IconShape) -> Unit,
     onThemedIcons: (Boolean) -> Unit,
+    onIconPack: (String?) -> Unit,
     onColumns: (Int) -> Unit,
     onRows: (Int) -> Unit,
     onIconSize: (Int) -> Unit,
     onPages: (Int) -> Unit,
+    onShowHomeLabels: (Boolean) -> Unit,
+    onHomeSearchBar: (Boolean) -> Unit,
     hiddenAppCount: Int,
     onUnhideAll: () -> Unit,
     onLayoutLock: (Boolean) -> Unit,
     onAddWidget: () -> Unit,
+    onDrawerSuggestions: (Boolean) -> Unit,
+    onDrawerAutoKeyboard: (Boolean) -> Unit,
+    onClearSuggestions: () -> Unit,
     onClockStyle: (ClockStyle) -> Unit,
     onClockAlignment: (ClockAlignment) -> Unit,
     onClockTimeFormat: (ClockTimeFormat) -> Unit,
@@ -77,6 +85,7 @@ fun SettingsScreen(
     onSwipeDown: (GestureAction) -> Unit,
     onDoubleTap: (GestureAction) -> Unit,
     onPinch: (GestureAction) -> Unit,
+    onHaptics: (Boolean) -> Unit,
     onHomeSettings: () -> Unit,
     onWallpaper: () -> Unit,
     onExport: () -> Unit,
@@ -120,8 +129,26 @@ fun SettingsScreen(
                         "Uses monochrome artwork when Android and the app provide it",
                         settings.themedIcons,
                         onThemedIcons,
-                        Build.VERSION.SDK_INT >= 33,
+                        Build.VERSION.SDK_INT >= 33 && settings.iconPack == null,
                         tokens,
+                    )
+                    Label("Icon pack", tokens.foreground)
+                    val packOptions = listOf<IconPack?>(null) + iconPacks
+                    Choices(
+                        packOptions,
+                        iconPacks.firstOrNull { it.packageName == settings.iconPack },
+                        { it?.label ?: "System icons" },
+                        { onIconPack(it?.packageName) },
+                    )
+                    Text(
+                        when {
+                            settings.iconPack != null && iconPacks.none { it.packageName == settings.iconPack } ->
+                                "The selected icon pack is not installed, so system icons are shown."
+                            iconPacks.isEmpty() -> "Install an ADW or Nova compatible icon pack to see it here."
+                            else -> "Apps the pack does not cover keep their own icon."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.mutedForeground,
                     )
                     Label("Icon size", tokens.foreground)
                     Choices(listOf(44, 52, 60, 68), settings.iconSize, { "$it dp" }, onIconSize)
@@ -134,6 +161,8 @@ fun SettingsScreen(
                     Choices((4..8).toList(), settings.rows, Int::toString, onRows)
                     Label("Pages", tokens.foreground)
                     Choices((1..9).toList(), settings.pageCount, Int::toString, onPages)
+                    Toggle("Show app labels", "Names under Home apps and folders", settings.showHomeLabels, onShowHomeLabels, true, tokens)
+                    Toggle("Search bar", "A search pill above the dock", settings.homeSearchBar, onHomeSearchBar, true, tokens)
                     Toggle("Lock layout", "Prevents moving, combining, adding, removing, and editing home items", settings.layoutLocked, onLayoutLock, true, tokens)
                     if (hiddenAppCount > 0) OutlinedButton(onClick = onUnhideAll, Modifier.fillMaxWidth()) {
                         Text("Restore $hiddenAppCount hidden ${if (hiddenAppCount == 1) "app" else "apps"}")
@@ -148,6 +177,19 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = tokens.mutedForeground,
                     )
+                }
+
+                SettingsCard("App library", "Search, suggestions, and keyboard", settings.visualStyle) {
+                    Toggle(
+                        "Suggested apps",
+                        "Ranks the apps you open most and most recently. Counts stay on this device.",
+                        settings.drawerSuggestions,
+                        onDrawerSuggestions,
+                        true,
+                        tokens,
+                    )
+                    Toggle("Open keyboard automatically", "Focus search whenever the library opens", settings.drawerAutoKeyboard, onDrawerAutoKeyboard, true, tokens)
+                    OutlinedButton(onClick = onClearSuggestions, modifier = Modifier.fillMaxWidth()) { Text("Clear suggestion history") }
                 }
 
                 SettingsCard("Clock", "Time, date, alignment, and typography", settings.visualStyle) {
@@ -182,6 +224,7 @@ fun SettingsScreen(
                     Choices(supportedGestureActions, settings.doubleTapAction, { it.label() }, onDoubleTap)
                     Label("Pinch", tokens.foreground)
                     Choices(supportedGestureActions, settings.pinchAction, { it.label() }, onPinch)
+                    Toggle("Haptic feedback", "Vibration on long press, drag, and index scrubbing", settings.haptics, onHaptics, true, tokens)
                     Text(
                         "Pinch requires two pointers. Long-press only activates customization on unconsumed empty Home space. Rumb never replaces Android's secure lock screen.",
                         style = MaterialTheme.typography.bodySmall,
@@ -281,6 +324,7 @@ private fun ClockTimeFormat.label() = when (this) {
 private fun GestureAction.label() = when (this) {
     GestureAction.NONE -> "None"
     GestureAction.OPEN_DRAWER -> "All apps"
+    GestureAction.OPEN_SEARCH -> "Search"
     GestureAction.OPEN_QUICK_PANEL -> "Quick panel"
     GestureAction.OPEN_SETTINGS -> "Settings"
     GestureAction.LOCK_LAYOUT -> "Toggle layout lock"

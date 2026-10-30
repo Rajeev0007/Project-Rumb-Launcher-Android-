@@ -31,6 +31,8 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity(), LauncherActivityController {
     override var onImportReady: ((String) -> Unit)? = null
     override var onError: ((String) -> Unit)? = null
+    override var onHomeIntent: (() -> Unit)? = null
+    override var onMemoryPressure: (() -> Unit)? = null
     override var onWidgetReady: ((WidgetSelection) -> Boolean)? = null
         set(value) {
             field = value
@@ -105,6 +107,18 @@ class MainActivity : ComponentActivity(), LauncherActivityController {
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
         setContent { RumbLauncherRoot(this) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)) {
+            onHomeIntent?.invoke()
+        }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) onMemoryPressure?.invoke()
     }
 
     override fun onStart() {

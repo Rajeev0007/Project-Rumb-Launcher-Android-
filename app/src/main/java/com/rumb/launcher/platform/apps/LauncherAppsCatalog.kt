@@ -38,6 +38,11 @@ class LauncherAppsCatalog(context: Context) : AutoCloseable {
     private var refreshJob: Job? = null
     private val refreshGeneration = AtomicInteger()
 
+    // Snapshots from the last successful load. Icon loading reads these instead of making a
+    // LauncherApps IPC call for every icon, which was the main cost of scrolling the library.
+    @Volatile private var activityInfoByKey: Map<String, LauncherActivityInfo> = emptyMap()
+    @Volatile private var usersBySerial: Map<Long, UserHandle> = emptyMap()
+
     private val callback = object : LauncherApps.Callback() {
         override fun onPackageRemoved(packageName: String, user: UserHandle) = refresh()
         override fun onPackageAdded(packageName: String, user: UserHandle) = refresh()
@@ -77,13 +82,13 @@ class LauncherAppsCatalog(context: Context) : AutoCloseable {
         }
     }
 
-    fun launch(app: InstalledApp) {
+    fun launch(app: InstalledApp, source: LaunchSource? = null) {
         val service = launcherApps ?: error("Launcher service is unavailable")
         service.startMainActivity(
             ComponentName(app.packageName, app.activityName),
             userFor(app.id.profileSerial) ?: error("The ${app.profileLabel ?: "selected"} profile is unavailable"),
-            null,
-            null,
+            source?.bounds,
+            source?.options,
         )
     }
 
@@ -116,27 +121,35 @@ class LauncherAppsCatalog(context: Context) : AutoCloseable {
     }
 
     fun activityInfo(appId: AppId): LauncherActivityInfo? {
+        activityInfoByKey[appId.stableKey]?.let { return it }
         val service = launcherApps ?: return null
         val user = userFor(appId.profileSerial) ?: return null
         val component = ComponentName.unflattenFromString(appId.component) ?: return null
-        return service.getActivityList(component.packageName, user).firstOrNull { it.componentName == component }
+        return runCatching {
+            service.getActivityList(component.packageName, user).firstOrNull { it.componentName == component }
+        }.getOrNull()
     }
 
-    fun userFor(serial: Long): UserHandle? = launcherApps?.profiles.orEmpty()
+    fun userFor(serial: Long): UserHandle? = usersBySerial[serial] ?: launcherApps?.profiles.orEmpty()
         .firstOrNull { userManager?.getSerialNumberForUser(it) == serial }
 
     private fun loadApps(): List<InstalledApp> {
         val service = launcherApps ?: error("Android LauncherApps service is unavailable")
         val currentUser = Process.myUserHandle()
         val collator = Collator.getInstance(Locale.getDefault())
-        return service.profiles.flatMap { user ->
+        val infos = HashMap<String, LauncherActivityInfo>()
+        val users = HashMap<Long, UserHandle>()
+        val apps = service.profiles.flatMap { user ->
             val serial = userManager?.getSerialNumberForUser(user)?.takeIf { it >= 0 } ?: return@flatMap emptyList()
+            users[serial] = user
             val workProfile = user != currentUser
             val profileLabel = if (workProfile) "Work" else null
             runCatching { service.getActivityList(null, user) }.getOrDefault(emptyList()).mapNotNull { info ->
                 if (info.applicationInfo.packageName == appContext.packageName) return@mapNotNull null
+                val id = AppId(info.componentName.flattenToString(), serial)
+                infos[id.stableKey] = info
                 InstalledApp(
-                    id = AppId(info.componentName.flattenToString(), serial),
+                    id = id,
                     label = info.label?.toString()?.ifBlank { info.applicationInfo.packageName } ?: info.applicationInfo.packageName,
                     packageName = info.applicationInfo.packageName,
                     activityName = info.componentName.className,
@@ -145,6 +158,9 @@ class LauncherAppsCatalog(context: Context) : AutoCloseable {
                 )
             }
         }.distinctBy { it.id.stableKey }.sortedWith { left, right -> collator.compare(left.label, right.label) }
+        usersBySerial = users
+        activityInfoByKey = infos
+        return apps
     }
 
     override fun close() {
