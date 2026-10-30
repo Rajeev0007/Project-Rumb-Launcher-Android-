@@ -35,11 +35,11 @@ env:
   # Lawnchair 16-dev at 8429fbe (30 Oct 2026): newest upstream fixes and Android 16 support.
   # Upstream CI built and published this exact commit successfully.
   LAWNCHAIR_REF: 8429fbe09dca7a5e087916710ac0535d3fd948bb
-  RUMB_VERSION_NAME: "Rumb 4.5.0"
+  RUMB_VERSION_NAME: "Rumb 4.5.1"
   # Must increase every release. Upstream is 1600020100; Rumb adds its own patch number.
-  RUMB_VERSION_CODE: "1600020150"
-  RELEASE_TAG: v4.5.0
-  RELEASE_TITLE: "Rumb Launcher 4.5.0"
+  RUMB_VERSION_CODE: "1600020160"
+  RELEASE_TAG: v4.5.1
+  RELEASE_TITLE: "Rumb Launcher 4.5.1"
 
 jobs:
   build:
@@ -125,8 +125,62 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  device-test:
+    name: Test on an Android emulator
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out Rumb branding
+        uses: actions/checkout@v7
+        with:
+          path: rumb
+
+      - name: Download APK
+        uses: actions/download-artifact@v8
+        with:
+          name: Rumb-Launcher-lawnchair-edition
+          path: dist
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Rumb on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: python3 rumb/lawnchair-edition/device-test/run_device_test.py "dist/Rumb-Launcher-${{ env.RELEASE_TAG }}.apk" device-report
+
+      - name: Upload device report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Rumb-device-report
+          path: device-report
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    needs: [build, device-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v8
+        with:
+          name: Rumb-Launcher-lawnchair-edition
+          path: dist
+
       - name: Publish GitHub release
-        if: github.event_name == 'push'
         working-directory: dist
         env:
           GH_TOKEN: ${{ github.token }}
