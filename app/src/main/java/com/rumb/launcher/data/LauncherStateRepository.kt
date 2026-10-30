@@ -16,9 +16,15 @@ import com.rumb.launcher.domain.LauncherSettings
 import com.rumb.launcher.domain.ThemePreference
 import com.rumb.launcher.domain.VisualStyle
 import com.rumb.launcher.domain.normalizeHomePlacements
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -31,11 +37,44 @@ class LauncherStateRepository(context: Context) {
     private val mutableState = MutableStateFlow(load())
     val state: StateFlow<LauncherSettings> = mutableState.asStateFlow()
 
+    private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val pendingLock = Any()
+    private val writeLock = Any()
+    private var pending: LauncherSettings? = null
+    private var persistJob: Job? = null
+
+    /**
+     * Applies [transform] and publishes the result immediately. JSON encoding and the disk write
+     * happen off the main thread, coalesced so rapid changes (drags, sliders) write once.
+     */
     @Synchronized
     fun update(transform: (LauncherSettings) -> LauncherSettings) {
-        val normalized = normalize(transform(mutableState.value))
-        persist(normalized)
+        val current = mutableState.value
+        val transformed = transform(current)
+        if (transformed === current) return
+        val normalized = normalize(transformed)
         mutableState.value = normalized
+        schedulePersist(normalized)
+    }
+
+    /** Writes any pending state now. Call when the launcher stops so nothing is lost. */
+    fun flush() {
+        persistJob?.cancel()
+        writePending()
+    }
+
+    private fun schedulePersist(value: LauncherSettings) {
+        synchronized(pendingLock) { pending = value }
+        persistJob?.cancel()
+        persistJob = persistScope.launch {
+            delay(PERSIST_DELAY_MS)
+            writePending()
+        }
+    }
+
+    private fun writePending() = synchronized(writeLock) {
+        val value = synchronized(pendingLock) { pending.also { pending = null } } ?: return@synchronized
+        persist(value)
     }
 
     fun exportJson(): String = encode(
@@ -63,6 +102,7 @@ class LauncherStateRepository(context: Context) {
             throw IllegalArgumentException("Backup is not valid Rumb Launcher JSON", error)
         }
         update { parsed }
+        flush()
     }
 
     private fun load(): LauncherSettings {
@@ -83,6 +123,7 @@ class LauncherStateRepository(context: Context) {
         LauncherSettings(
             clockStyle = ClockStyle.HIDDEN,
             swipeDownAction = GestureAction.OPEN_QUICK_PANEL,
+            homeSearchBar = true,
         ),
     ).also(::persist)
 
@@ -176,6 +217,11 @@ class LauncherStateRepository(context: Context) {
             hiddenApps = value.hiddenApps.take(1000).toSet(),
             homeItems = items,
             dockApps = value.dockApps.distinctBy(AppId::stableKey).take(5),
+            iconPack = value.iconPack?.trim()?.takeIf { PACKAGE_NAME.matches(it) },
+            customLabels = value.customLabels.entries.asSequence()
+                .mapNotNull { (id, label) -> label.trim().take(MAX_LABEL_LENGTH).takeIf(String::isNotEmpty)?.let { id to it } }
+                .take(1000)
+                .toMap(),
         )
     }
 
@@ -209,6 +255,17 @@ class LauncherStateRepository(context: Context) {
         put("pinchAction", value.pinchAction.name)
         put("hiddenApps", JSONArray(value.hiddenApps.map { encodeId(it, portableIds) }))
         put("dockApps", JSONArray(value.dockApps.map { encodeId(it, portableIds) }))
+        value.iconPack?.let { put("iconPack", it) }
+        put("showHomeLabels", value.showHomeLabels)
+        put("homeSearchBar", value.homeSearchBar)
+        put("drawerSuggestions", value.drawerSuggestions)
+        put("drawerAutoKeyboard", value.drawerAutoKeyboard)
+        put("haptics", value.haptics)
+        put("customLabels", JSONArray().apply {
+            value.customLabels.forEach { (id, label) ->
+                put(JSONObject().put("app", encodeId(id, portableIds)).put("label", label))
+            }
+        })
         put("homeItems", JSONArray().apply {
             value.homeItems.forEach { item ->
                 if (includeDeviceBindings || item.type != HomeItemType.WIDGET) put(JSONObject().apply {
@@ -275,6 +332,17 @@ class LauncherStateRepository(context: Context) {
                 hiddenApps = ids("hiddenApps"),
                 dockApps = json.optJSONArray("dockApps").toStrings().mapNotNull(::parseStoredId),
                 homeItems = homeItems,
+                iconPack = json.optString("iconPack").takeIf(String::isNotBlank),
+                showHomeLabels = json.optBoolean("showHomeLabels", true),
+                // Existing layouts keep their look; fresh installs opt in to the search bar.
+                homeSearchBar = json.optBoolean("homeSearchBar", false),
+                drawerSuggestions = json.optBoolean("drawerSuggestions", true),
+                drawerAutoKeyboard = json.optBoolean("drawerAutoKeyboard", false),
+                haptics = json.optBoolean("haptics", true),
+                customLabels = json.optJSONArray("customLabels").objects().mapNotNull { entry ->
+                    val id = parseStoredId(entry.optString("app")) ?: return@mapNotNull null
+                    entry.optString("label").trim().take(MAX_LABEL_LENGTH).takeIf(String::isNotEmpty)?.let { id to it }
+                }.toMap(),
             ),
         )
     }
@@ -362,5 +430,8 @@ class LauncherStateRepository(context: Context) {
         private const val KEY_LEGACY_THEME = "theme"
         private const val FORMAT = "com.rumb.launcher.layout"
         private const val MAX_IMPORT_BYTES = 1_048_576
+        private const val MAX_LABEL_LENGTH = 48
+        private const val PERSIST_DELAY_MS = 250L
+        private val PACKAGE_NAME = Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")
     }
 }

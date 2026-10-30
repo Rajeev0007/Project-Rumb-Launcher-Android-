@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.rumb.launcher.data.AppUsage
 import com.rumb.launcher.data.LauncherStateRepository
+import com.rumb.launcher.data.UsageTracker
 import com.rumb.launcher.domain.AppId
 import com.rumb.launcher.domain.AppShortcut
 import com.rumb.launcher.domain.CatalogState
@@ -26,12 +28,17 @@ import com.rumb.launcher.domain.layoutSpanX
 import com.rumb.launcher.domain.layoutSpanY
 import com.rumb.launcher.domain.occupiedCells
 import com.rumb.launcher.domain.packHomeItems
+import com.rumb.launcher.domain.rankApps
 import com.rumb.launcher.platform.SystemActions
 import com.rumb.launcher.platform.WidgetSelection
+import com.rumb.launcher.platform.apps.LaunchSource
 import com.rumb.launcher.platform.apps.LauncherAppsCatalog
 import com.rumb.launcher.platform.icons.AppIconLoader
+import com.rumb.launcher.platform.icons.IconPack
 import com.rumb.launcher.platform.widgets.WidgetPreviewLoader
 import com.rumb.launcher.platform.widgets.WidgetProviderCatalog
+import java.text.Collator
+import java.util.Locale
 import java.util.UUID
 import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
@@ -40,72 +47,122 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class LauncherViewModel(context: Context) : ViewModel() {
     private val appContext = context.applicationContext
     private val repository = LauncherStateRepository(appContext)
+    private val usage = UsageTracker(appContext)
     val catalog = LauncherAppsCatalog(appContext)
     val iconLoader = AppIconLoader(appContext, catalog)
     val widgetCatalog = WidgetProviderCatalog(appContext)
     val widgetPreviewLoader = WidgetPreviewLoader(appContext, widgetCatalog)
     val systemActions = SystemActions(appContext)
 
-    private val destination = MutableStateFlow(Destination.HOME)
+    private val transient = MutableStateFlow(TransientState())
     private val search = MutableStateFlow("")
-    private val selectedApp = MutableStateFlow<InstalledApp?>(null)
-    private val openedFolderId = MutableStateFlow<String?>(null)
-    private val shortcuts = MutableStateFlow<List<AppShortcut>>(emptyList())
-    private val message = MutableStateFlow<String?>(null)
+    private val iconPacks = MutableStateFlow<List<IconPack>>(emptyList())
     private var shortcutJob: Job? = null
+    @Volatile private var currentHomePage = 0
 
-    private val baseState = combine(repository.state, catalog.state, destination, search, selectedApp) {
-            settings, catalogState, currentDestination, query, app ->
-        BaseState(settings, catalogState, currentDestination, query, app)
+    private val appLists = combine(
+        repository.state.map { AppListKey(it.hiddenApps, it.customLabels) }.distinctUntilChanged(),
+        catalog.state,
+    ) { key, catalogState -> buildAppLists(catalogState.apps, key) }
+
+    private val searchResults = combine(appLists, search) { lists, query ->
+        SearchResults(query, if (query.isBlank()) lists.visible else rankApps(lists.visible, query))
     }
 
-    val uiState: StateFlow<LauncherUiState> = combine(
-        baseState,
-        openedFolderId,
-        shortcuts,
-        message,
-    ) { base, folderId, availableShortcuts, currentMessage ->
-        val visibleApps = base.catalog.apps.filterNot { it.id in base.settings.hiddenApps }
-        LauncherUiState(
-            settings = base.settings,
-            catalog = base.catalog,
-            apps = visibleApps,
-            filteredApps = if (base.query.isBlank()) visibleApps else visibleApps.filter {
-                it.label.contains(base.query.trim(), ignoreCase = true) ||
-                    it.packageName.contains(base.query.trim(), ignoreCase = true)
-            },
-            destination = base.destination,
-            search = base.query,
-            selectedApp = base.selectedApp,
-            openedFolder = folderId?.let { id -> base.settings.homeItems.firstOrNull { it.id == id && it.type == HomeItemType.FOLDER } },
-            shortcuts = availableShortcuts,
-            message = currentMessage,
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, LauncherUiState())
+    private val suggestions = combine(
+        appLists,
+        usage.state,
+        repository.state.map { it.drawerSuggestions }.distinctUntilChanged(),
+    ) { lists, usageMap, enabled ->
+        if (enabled) topSuggestions(lists.visible, usageMap) else emptyList()
+    }
 
-    fun navigate(value: Destination) { destination.value = value }
+    private val data = combine(repository.state, catalog.state, appLists, searchResults, suggestions) {
+            settings, catalogState, lists, results, suggested ->
+        LauncherData(settings, catalogState, lists, results, suggested)
+    }
+
+    val uiState: StateFlow<LauncherUiState> = combine(data, transient, iconPacks) { data, ui, packs ->
+        LauncherUiState(
+            settings = data.settings,
+            catalog = data.catalog,
+            allApps = data.lists.all,
+            appsById = data.lists.byId,
+            apps = data.lists.visible,
+            filteredApps = data.results.apps,
+            suggestions = data.suggestions,
+            destination = ui.destination,
+            search = data.results.query,
+            selectedApp = ui.selectedAppId?.let(data.lists.byId::get),
+            openedFolder = ui.openedFolderId?.let { id ->
+                data.settings.homeItems.firstOrNull { it.id == id && it.type == HomeItemType.FOLDER }
+            },
+            shortcuts = ui.shortcuts,
+            message = ui.message,
+            searchFocusRequested = ui.searchFocusRequested,
+            iconPacks = packs,
+        )
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, LauncherUiState())
+
+    fun navigate(value: Destination) {
+        transient.update { it.copy(destination = value, searchFocusRequested = if (value == Destination.DRAWER) it.searchFocusRequested else false) }
+        if (value == Destination.SETTINGS) refreshIconPacks()
+    }
+
+    fun openSearch() = transient.update { it.copy(destination = Destination.DRAWER, searchFocusRequested = true) }
+    fun consumeSearchFocus() = transient.update { it.copy(searchFocusRequested = false) }
     fun search(value: String) { search.value = value.take(80) }
+
     fun selectApp(app: InstalledApp?) {
         shortcutJob?.cancel()
-        selectedApp.value = app
-        shortcuts.value = emptyList()
+        transient.update { it.copy(selectedAppId = app?.id, shortcuts = emptyList()) }
         if (app != null) shortcutJob = viewModelScope.launch(Dispatchers.Default) {
             val result = runCatching { catalog.shortcuts(app) }.getOrDefault(emptyList())
-            if (selectedApp.value?.id == app.id) shortcuts.value = result
+            transient.update { if (it.selectedAppId == app.id) it.copy(shortcuts = result) else it }
         }
     }
-    fun openFolder(folder: HomeItem?) { openedFolderId.value = folder?.id }
-    fun consumeMessage() { message.value = null }
-    fun showMessage(value: String) { message.value = value }
 
-    fun launch(app: InstalledApp) = safe("App could not be opened") { catalog.launch(app) }
+    fun openFolder(folder: HomeItem?) = transient.update { it.copy(openedFolderId = folder?.id) }
+    fun consumeMessage() = transient.update { it.copy(message = null) }
+    fun showMessage(value: String) = transient.update { it.copy(message = value) }
+    fun onHomePageChanged(page: Int) { currentHomePage = page }
+
+    fun launch(app: InstalledApp, source: LaunchSource? = null) = safe("App could not be opened") {
+        catalog.launch(app, source)
+        usage.recordLaunch(app.id)
+    }
+
     fun launchShortcut(shortcut: AppShortcut) = safe("Shortcut could not be opened") { catalog.launchShortcut(shortcut) }
+    fun webSearch(query: String) = systemActions.webSearch(query)
+    fun storeSearch(query: String) = systemActions.storeSearch(query)
+    fun clearSuggestions() {
+        usage.clear()
+        showMessage("Suggestions cleared")
+    }
+
+    /** Persists pending writes. Called when the launcher leaves the foreground. */
+    fun onStop() {
+        repository.flush()
+        usage.flush()
+    }
+
+    fun onMemoryPressure() = iconLoader.trim()
+
+    fun refreshIconPacks() {
+        viewModelScope.launch(Dispatchers.Default) {
+            iconPacks.value = runCatching { iconLoader.installedPacks() }.getOrDefault(emptyList())
+        }
+    }
 
     fun pin(app: InstalledApp) = repository.update { state ->
         if (state.layoutLocked) {
@@ -113,11 +170,18 @@ class LauncherViewModel(context: Context) : ViewModel() {
             return@update state
         }
         if (state.homeItems.any { app.id in it.appIds } || app.id in state.dockApps) state else {
-            val placement = findFreePlacement(state.homeItems, state.columns, state.rows, 9)
+            val placement = findFreePlacement(
+                state.homeItems, state.columns, state.rows, 9,
+                preferredPage = currentHomePage.coerceIn(0, state.pageCount - 1),
+            )
             if (placement == null) {
                 showMessage("All nine home pages are full")
                 return@update state
             }
+            showMessage(
+                if (placement.page == currentHomePage) "Added ${app.label} to Home"
+                else "Added ${app.label} to page ${placement.page + 1}",
+            )
             state.copy(
                 pageCount = maxOf(state.pageCount, placement.page + 1),
                 homeItems = state.homeItems + HomeItem(
@@ -152,7 +216,10 @@ class LauncherViewModel(context: Context) : ViewModel() {
                     val cellHeightDp = usableHeightDp.toFloat() / state.rows
                     val spanX = ceil(widget.minWidthPx / density / cellWidthDp).toInt().coerceIn(1, state.columns)
                     val spanY = ceil(widget.minHeightPx / density / cellHeightDp).toInt().coerceIn(1, state.rows)
-                    val placement = findFreePlacement(state.homeItems, state.columns, state.rows, 9, spanX, spanY)
+                    val placement = findFreePlacement(
+                        state.homeItems, state.columns, state.rows, 9, spanX, spanY,
+                        preferredPage = currentHomePage.coerceIn(0, state.pageCount - 1),
+                    )
                     if (placement == null) {
                         failure = "No free ${spanX}×$spanY area is available across nine pages"
                         state
@@ -217,6 +284,17 @@ class LauncherViewModel(context: Context) : ViewModel() {
             state.dockApps + app.id
         }
         state.copy(dockApps = dock, homeItems = removeAppFromHome(state.homeItems, app.id))
+    }
+
+    /** Sets a custom label. A blank value or the original label restores the app's own name. */
+    fun renameApp(appId: AppId, rawLabel: String) {
+        val label = rawLabel.trim().take(48)
+        val original = catalog.state.value.apps.firstOrNull { it.id == appId }?.label
+        repository.update { state ->
+            val labels = if (label.isEmpty() || label == original) state.customLabels - appId
+            else state.customLabels + (appId to label)
+            if (labels == state.customLabels) state else state.copy(customLabels = labels)
+        }
     }
 
     fun moveItem(itemId: String, columnDelta: Int, rowDelta: Int) = repository.update { state ->
@@ -309,7 +387,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
     }
 
     fun importJson(raw: String) = runCatching { repository.importJson(raw) }
-        .onSuccess { showMessage("Layout imported. Widget bindings were not imported.") }
+        .onSuccess { iconLoader.invalidate(); showMessage("Layout imported. Widget bindings were not imported.") }
         .onFailure { showMessage(it.message ?: "Import failed") }
     fun exportJson(): String = repository.exportJson()
 
@@ -318,6 +396,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
     fun updateDynamicColor(value: Boolean) = update { it.copy(dynamicColor = value) }
     fun updateIconShape(value: IconShape) = update { it.copy(iconShape = value) }
     fun updateThemedIcons(value: Boolean) { iconLoader.invalidate(); update { it.copy(themedIcons = value) } }
+    fun updateIconPack(value: String?) { iconLoader.invalidate(); update { it.copy(iconPack = value) } }
     fun updateColumns(value: Int) = reflowGrid(value, repository.state.value.rows)
     fun updateRows(value: Int) = reflowGrid(repository.state.value.columns, value)
     fun updateIconSize(value: Int) = update { it.copy(iconSize = value) }
@@ -342,14 +421,24 @@ class LauncherViewModel(context: Context) : ViewModel() {
     fun updateSwipeDown(value: GestureAction) = update { it.copy(swipeDownAction = value) }
     fun updateDoubleTap(value: GestureAction) = update { it.copy(doubleTapAction = value) }
     fun updatePinch(value: GestureAction) = update { it.copy(pinchAction = value) }
+    fun updateShowHomeLabels(value: Boolean) = update { it.copy(showHomeLabels = value) }
+    fun updateHomeSearchBar(value: Boolean) = update { it.copy(homeSearchBar = value) }
+    fun updateDrawerSuggestions(value: Boolean) = update { it.copy(drawerSuggestions = value) }
+    fun updateDrawerAutoKeyboard(value: Boolean) = update { it.copy(drawerAutoKeyboard = value) }
+    fun updateHaptics(value: Boolean) = update { it.copy(haptics = value) }
 
     fun performGesture(action: GestureAction) {
         when (action) {
             GestureAction.NONE -> Unit
             GestureAction.OPEN_DRAWER -> navigate(Destination.DRAWER)
+            GestureAction.OPEN_SEARCH -> openSearch()
             GestureAction.OPEN_QUICK_PANEL -> navigate(Destination.QUICK_PANEL)
             GestureAction.OPEN_SETTINGS -> navigate(Destination.SETTINGS)
-            GestureAction.LOCK_LAYOUT -> updateLayoutLocked(!repository.state.value.layoutLocked)
+            GestureAction.LOCK_LAYOUT -> {
+                val locked = !repository.state.value.layoutLocked
+                updateLayoutLocked(locked)
+                showMessage(if (locked) "Home layout locked" else "Home layout unlocked")
+            }
         }
     }
 
@@ -392,25 +481,66 @@ class LauncherViewModel(context: Context) : ViewModel() {
     private fun safe(fallback: String, block: () -> Unit) = runCatching(block).onFailure { showMessage(it.message ?: fallback) }
 
     override fun onCleared() {
+        repository.flush()
+        usage.flush()
         catalog.close()
         widgetCatalog.close()
         super.onCleared()
     }
 
     companion object {
+        private const val MAX_SUGGESTIONS = 8
+
         fun factory(context: Context): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = LauncherViewModel(context) as T
         }
+
+        private fun buildAppLists(source: List<InstalledApp>, key: AppListKey): AppLists {
+            val labeled = if (key.labels.isEmpty()) source else {
+                val collator = Collator.getInstance(Locale.getDefault())
+                source.map { app -> key.labels[app.id]?.let { app.copy(label = it) } ?: app }
+                    .sortedWith { left, right -> collator.compare(left.label, right.label) }
+            }
+            return AppLists(
+                all = labeled,
+                byId = labeled.associateBy(InstalledApp::id),
+                visible = if (key.hidden.isEmpty()) labeled else labeled.filterNot { it.id in key.hidden },
+            )
+        }
+
+        private fun topSuggestions(apps: List<InstalledApp>, usage: Map<String, AppUsage>): List<InstalledApp> {
+            if (usage.isEmpty()) return emptyList()
+            val now = System.currentTimeMillis()
+            return apps.mapNotNull { app -> usage[app.id.stableKey]?.let { app to it.score(now) } }
+                .sortedByDescending { it.second }
+                .take(MAX_SUGGESTIONS)
+                .map { it.first }
+        }
     }
 }
 
-private data class BaseState(
+private data class AppListKey(val hidden: Set<AppId>, val labels: Map<AppId, String>)
+private data class AppLists(
+    val all: List<InstalledApp>,
+    val byId: Map<AppId, InstalledApp>,
+    val visible: List<InstalledApp>,
+)
+private data class SearchResults(val query: String, val apps: List<InstalledApp>)
+private data class LauncherData(
     val settings: LauncherSettings,
     val catalog: CatalogState,
-    val destination: Destination,
-    val query: String,
-    val selectedApp: InstalledApp?,
+    val lists: AppLists,
+    val results: SearchResults,
+    val suggestions: List<InstalledApp>,
+)
+private data class TransientState(
+    val destination: Destination = Destination.HOME,
+    val selectedAppId: AppId? = null,
+    val openedFolderId: String? = null,
+    val shortcuts: List<AppShortcut> = emptyList(),
+    val message: String? = null,
+    val searchFocusRequested: Boolean = false,
 )
 
 enum class Destination { HOME, DRAWER, QUICK_PANEL, SETTINGS }
@@ -418,12 +548,20 @@ enum class Destination { HOME, DRAWER, QUICK_PANEL, SETTINGS }
 data class LauncherUiState(
     val settings: LauncherSettings = LauncherSettings(),
     val catalog: CatalogState = CatalogState(),
+    /** Every launchable app with custom labels applied, including hidden apps. */
+    val allApps: List<InstalledApp> = emptyList(),
+    val appsById: Map<AppId, InstalledApp> = emptyMap(),
+    /** Apps shown in the library, alphabetical. */
     val apps: List<InstalledApp> = emptyList(),
+    /** Ranked search results, or [apps] when the query is blank. */
     val filteredApps: List<InstalledApp> = emptyList(),
+    val suggestions: List<InstalledApp> = emptyList(),
     val destination: Destination = Destination.HOME,
     val search: String = "",
     val selectedApp: InstalledApp? = null,
     val openedFolder: HomeItem? = null,
     val shortcuts: List<AppShortcut> = emptyList(),
     val message: String? = null,
+    val searchFocusRequested: Boolean = false,
+    val iconPacks: List<IconPack> = emptyList(),
 )

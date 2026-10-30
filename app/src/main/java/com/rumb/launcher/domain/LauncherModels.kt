@@ -37,7 +37,7 @@ enum class ClockStyle { HIDDEN, LARGE, COMPACT, MINIMAL }
 enum class ClockAlignment { LEFT, CENTER, RIGHT }
 enum class ClockTimeFormat { SYSTEM, TWELVE_HOUR, TWENTY_FOUR_HOUR }
 enum class ClockFont { SANS, SERIF, MONOSPACE }
-enum class GestureAction { NONE, OPEN_DRAWER, OPEN_QUICK_PANEL, OPEN_SETTINGS, LOCK_LAYOUT }
+enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SEARCH, OPEN_QUICK_PANEL, OPEN_SETTINGS, LOCK_LAYOUT }
 enum class HomeItemType { APP, FOLDER, WIDGET }
 
 data class HomeItem(
@@ -79,9 +79,26 @@ data class LauncherSettings(
     val hiddenApps: Set<AppId> = emptySet(),
     val homeItems: List<HomeItem> = emptyList(),
     val dockApps: List<AppId> = emptyList(),
+    val iconPack: String? = null,
+    val showHomeLabels: Boolean = true,
+    val homeSearchBar: Boolean = false,
+    val drawerSuggestions: Boolean = true,
+    val drawerAutoKeyboard: Boolean = false,
+    val haptics: Boolean = true,
+    val customLabels: Map<AppId, String> = emptyMap(),
 ) {
-    companion object { const val CURRENT_SCHEMA = 5 }
+    companion object { const val CURRENT_SCHEMA = 6 }
 }
+
+/** Everything that changes how an app icon bitmap is produced. Used as a cache and recomposition key. */
+data class IconAppearance(
+    val shape: IconShape = IconShape.SYSTEM,
+    val themed: Boolean = false,
+    val iconPack: String? = null,
+)
+
+val LauncherSettings.iconAppearance: IconAppearance
+    get() = IconAppearance(iconShape, themedIcons, iconPack)
 
 data class CatalogState(
     val apps: List<InstalledApp> = emptyList(),

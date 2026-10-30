@@ -13,6 +13,10 @@ interface LauncherActivityController {
     var onImportReady: ((json: String) -> Unit)?
     var onWidgetReady: ((widget: WidgetSelection) -> Boolean)?
     var onError: ((message: String) -> Unit)?
+    /** Invoked when the user presses Home while Rumb is already the foreground launcher. */
+    var onHomeIntent: (() -> Unit)?
+    /** Invoked when Android asks apps to release memory. */
+    var onMemoryPressure: (() -> Unit)?
 
     fun exportJson(json: String)
     fun importJson()

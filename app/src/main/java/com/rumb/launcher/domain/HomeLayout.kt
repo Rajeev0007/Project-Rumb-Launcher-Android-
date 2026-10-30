@@ -45,10 +45,16 @@ fun findFreePlacement(
     spanX: Int = 1,
     spanY: Int = 1,
     ignoredItemId: String? = null,
+    preferredPage: Int = 0,
 ): HomePlacement? {
     val safeSpanX = spanX.coerceIn(1, columns)
     val safeSpanY = spanY.coerceIn(1, rows)
-    repeat(pageCount.coerceIn(1, 9)) { page ->
+    val pages = pageCount.coerceIn(1, 9)
+    val pageOrder = buildList {
+        if (preferredPage in 0 until pages) add(preferredPage)
+        for (page in 0 until pages) if (page != preferredPage) add(page)
+    }
+    for (page in pageOrder) {
         for (row in 0..rows - safeSpanY) {
             for (column in 0..columns - safeSpanX) {
                 val cell = row * columns + column

@@ -1,6 +1,33 @@
-# Rumb Launcher Next 3.0.0
+# Rumb Launcher Next 3.1.0
 
 Rumb Launcher Next is a private, offline Android home-screen replacement built with native Kotlin and Jetpack Compose. V3 uses the supplied screenshots only as structural reference for a new AMOLED-first library, wallpaper-first Home, and safe quick-control launcher. Its surfaces, geometry, color treatment, and artwork are original rather than copies of another launcher or vendor interface. Android 8.0 (API 26) and newer are supported.
+
+## What's new in 3.1
+
+### Smoother, lag-free interaction
+
+- **Finger-following library.** Swiping up on Home drags the Apps/Widgets library with your finger and settles it with a spring, using fling velocity. Pull the list down from the top, or drag the header, to close it the same way.
+- **Home stays alive.** Home, the library, Settings, and Quick Panel are now layers instead of swapped screens, so widgets are no longer torn down and rebuilt every time you open the library.
+- **No icon flashing.** Already-loaded icons render on their first frame from a synchronous cache lookup. Icon loading reuses the app catalog's activity snapshot instead of a LauncherApps IPC call per icon, and bitmaps are uploaded to the GPU ahead of drawing.
+- **Off-main-thread state.** Search ranking, label overrides, hidden-app filtering, and suggestion scoring run on a background dispatcher. Settings are written to disk in the background, coalesced, and flushed when the launcher stops.
+- **Gesture fixes.** Slow swipes longer than the long-press timeout are no longer dropped. Widgets receive size updates only when their size actually changes, and neighbouring Home pages are kept composed for smooth paging.
+- **Apps open from their icon** using Android's scale-up launch animation and source bounds.
+
+### New features
+
+- **Item menu on Home and the dock.** Tap opens. Long-press and release opens the app sheet with shortcuts, Add/Remove Home, Dock, Rename, Hide, and App info. Long-press and move drags the item, with a live drop-target highlight that shows move, group-into-folder, or blocked.
+- **Folder previews and editor.** Folders show a 2×2 preview of their apps. The folder popup shows an icon grid, inline rename, per-app remove, and folder removal.
+- **Smarter search.** Results are ranked: exact, prefix, word-prefix, initials (for example "gm" for Google Maps), substring, then package name, with accents ignored. Enter launches the top result. "Search the web" and "Find in app store" hand the query to your own search, browser, or store app. Rumb still has no internet permission.
+- **Suggested apps** at the top of the library, ranked by launch count with a three-day half-life plus a recent-launch boost. Counts are stored only on the device, never exported, and can be cleared in Settings.
+- **Rename apps** from the app sheet. Custom names apply everywhere, including search, and are included in backups.
+- **Icon packs.** ADW/Nova-compatible packs (`appfilter.xml`) are discovered through public package queries. Apps a pack doesn't cover keep their own icon.
+- **Scrubbable A–Z index** with a letter bubble and haptic ticks. Letters without apps jump to the nearest available letter.
+- **Home search bar** (default on for fresh installs) and a new **Search** gesture action.
+- **Home button handling.** Pressing Home closes the library, panels, sheets, and edit mode. Pressing it again on Home returns to the first page.
+- New settings: app labels on Home, search bar, suggestions, auto-open keyboard, icon pack, and haptic feedback.
+- Widget remove buttons now appear only in edit mode, and tapping the Home preview finishes editing.
+
+The backup schema is now version 6. Older backups still import, and the new fields fall back to values that keep an existing Home looking the same.
 
 ## Install identity and the package-conflict fix
 
@@ -8,7 +35,7 @@ V3 installs as **Rumb Launcher Next** with application ID `com.rumb.launcher.nex
 
 Android refuses to update an installed package when the incoming APK has the same application ID but a different signing certificate. That commonly appears as an app-not-installed or package-conflict error. Giving V3 a new application ID lets it install beside an older `com.rumb.launcher` build, including an old differently signed debug APK. Android treats the two IDs as separate apps, so select **Rumb Launcher Next** again in the system Home chooser. Private app data does not transfer automatically between package IDs; use Rumb's explicit JSON export/import where the older build supports it.
 
-The Play Protect screenshot concerns the **old v2.0.1 debug APK**, with its old package identity and debug signing context. The current deliverable is **V3.0.0** (`versionCode 7`) under `com.rumb.launcher.next`. A locally built debug APK is still debug-signed; the hardened release is the unminified release variant signed only when all four release-signing variables are supplied. Package identity and release signing distinguish the current release from the old debug artifact, but no project can promise how Play Protect or an OEM scanner will classify a sideloaded APK.
+The Play Protect screenshot concerns the **old v2.0.1 debug APK**, with its old package identity and debug signing context. The current deliverable is **V3.1.0** (`versionCode 8`) under `com.rumb.launcher.next`. A locally built debug APK is still debug-signed; the hardened release is the unminified release variant signed only when all four release-signing variables are supplied. Package identity and release signing distinguish the current release from the old debug artifact, but no project can promise how Play Protect or an OEM scanner will classify a sideloaded APK.
 
 ## V3 Home
 

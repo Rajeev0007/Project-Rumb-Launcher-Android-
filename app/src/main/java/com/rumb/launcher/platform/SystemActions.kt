@@ -1,5 +1,6 @@
 package com.rumb.launcher.platform
 
+import android.app.SearchManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -28,6 +29,23 @@ class SystemActions(context: Context) {
     fun openBatterySettings() = start(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS), Intent(Settings.ACTION_SETTINGS))
     fun openWallpaperPicker() = start(Intent(Intent.ACTION_SET_WALLPAPER))
     fun openHomeSettings() = start(Intent(Settings.ACTION_HOME_SETTINGS))
+
+    /** Hands the query to the user's search or browser app. Rumb itself never goes online. */
+    fun webSearch(query: String) {
+        val text = query.trim().take(200)
+        if (text.isEmpty()) return
+        start(
+            Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, text),
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${Uri.encode(text)}"))
+                .addCategory(Intent.CATEGORY_BROWSABLE),
+        )
+    }
+
+    fun storeSearch(query: String) {
+        val text = query.trim().take(200)
+        if (text.isEmpty()) return
+        start(Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(text)}&c=apps")))
+    }
 
     fun toast(message: String) = Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
 
