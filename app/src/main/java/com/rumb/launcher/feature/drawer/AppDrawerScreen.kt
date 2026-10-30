@@ -10,7 +10,9 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.draggable
@@ -248,13 +250,14 @@ fun AppDrawerScreen(
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                    LibraryTabButton("Apps", selectedTab == LibraryTab.APPS, tokens.accent) { selectedTab = LibraryTab.APPS }
-                    LibraryTabButton("Widgets", selectedTab == LibraryTab.WIDGETS, tokens.accent) {
-                        focusManager.clearFocus()
-                        selectedTab = LibraryTab.WIDGETS
-                    }
-                }
+                LibraryTabs(
+                    selected = selectedTab,
+                    accent = tokens.accent,
+                    onSelect = { tab ->
+                        if (tab == LibraryTab.WIDGETS) focusManager.clearFocus()
+                        selectedTab = tab
+                    },
+                )
             }
             Column(Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)) {
                 if (selectedTab == LibraryTab.APPS) {
@@ -293,24 +296,38 @@ fun AppDrawerScreen(
     }
 }
 
+/** A sliding pill switcher. The highlight springs between halves. */
 @Composable
-private fun RowScope.LibraryTabButton(label: String, isSelected: Boolean, accent: Color, onClick: () -> Unit) {
-    val indicatorWidth by animateDpAsState(if (isSelected) 56.dp else 0.dp, label = "tab indicator")
-    val textColor by animateColorAsState(if (isSelected) Color.White else Color.White.copy(.55f), label = "tab color")
-    Column(
-        Modifier.weight(1f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-            .clickable(role = Role.Tab, onClick = onClick)
-            .semantics { selected = isSelected }
-            .padding(top = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+private fun LibraryTabs(selected: LibraryTab, accent: Color, onSelect: (LibraryTab) -> Unit) {
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp).height(48.dp)
+            .clip(CircleShape).background(Color(0xFF1A1A1E)).padding(4.dp),
     ) {
-        Text(
-            label,
-            color = textColor,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+        val half = maxWidth / 2
+        val highlightX by animateDpAsState(
+            if (selected == LibraryTab.APPS) 0.dp else half,
+            spring(dampingRatio = .72f, stiffness = 520f),
+            label = "tab highlight",
         )
-        Box(Modifier.padding(top = 10.dp).height(3.dp).width(indicatorWidth).background(accent, CircleShape))
+        Box(Modifier.offset(x = highlightX).width(half).fillMaxHeight().clip(CircleShape).background(accent))
+        Row(Modifier.fillMaxSize()) {
+            LibraryTab.entries.forEach { tab ->
+                val isSelected = tab == selected
+                val color by animateColorAsState(if (isSelected) Color.Black else Color.White.copy(alpha = .7f), label = "tab text")
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().clip(CircleShape)
+                        .selectable(selected = isSelected, role = Role.Tab) { onSelect(tab) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (tab == LibraryTab.APPS) "Apps" else "Widgets",
+                        color = color,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
     }
 }
 

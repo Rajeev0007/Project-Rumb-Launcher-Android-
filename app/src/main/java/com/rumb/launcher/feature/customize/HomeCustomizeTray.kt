@@ -1,6 +1,16 @@
 package com.rumb.launcher.feature.customize
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
+import com.rumb.launcher.ui.design.FilledIcon
+import com.rumb.launcher.ui.design.RumbPalette
+import com.rumb.launcher.ui.design.pressScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,35 +67,35 @@ fun HomeCustomizeTray(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tokens = visualTokens(selectedStyle)
-    VisualSurface(
-        style = selectedStyle,
+    val colors = MaterialTheme.colorScheme
+    androidx.compose.material3.Surface(
         modifier = modifier.fillMaxWidth(),
-        strong = true,
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-        elevation = 24.dp,
+        color = colors.surfaceContainerLow,
+        contentColor = colors.onSurface,
+        shadowElevation = 16.dp,
     ) {
-        Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 18.dp)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(top = 10.dp, bottom = 14.dp)) {
             Box(
-                Modifier.align(Alignment.CenterHorizontally).size(width = 38.dp, height = 4.dp)
-                    .clip(CircleShape).background(tokens.mutedForeground.copy(alpha = .35f)),
+                Modifier.align(Alignment.CenterHorizontally).size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape).background(colors.onSurfaceVariant.copy(alpha = .4f)),
             )
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 12.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Customize Home", color = tokens.foreground, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("Customise Home", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        if (layoutLocked) "Layout locked · appearance is still available" else "Changes preview instantly",
-                        color = tokens.mutedForeground,
+                        if (layoutLocked) "Layout locked · look and feel still editable" else "Changes apply instantly",
+                        color = colors.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                if (layoutLocked) Icon(Icons.Default.Lock, "Layout is locked", tint = tokens.accent, modifier = Modifier.size(20.dp))
+                if (layoutLocked) Icon(Icons.Default.Lock, "Layout is locked", tint = colors.primary, modifier = Modifier.size(20.dp))
             }
             LazyRow(
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(VisualStyle.entries, key = { it.name }) { style ->
@@ -93,13 +103,21 @@ fun HomeCustomizeTray(
                 }
             }
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                TrayAction(Icons.Default.Wallpaper, "Wallpaper", tokens.foreground, onWallpaper)
-                TrayAction(Icons.Default.AddBox, "Widgets", if (layoutLocked) tokens.mutedForeground.copy(.55f) else tokens.foreground, onWidgets)
-                TrayAction(Icons.Default.GridView, "Layout & clock", tokens.foreground, onLayoutAndClock)
-                TrayAction(Icons.Default.Check, "Done", tokens.accent, onDone)
+                TrayAction(Icons.Default.Wallpaper, "Wallpaper", RumbPalette.Pink, true, onWallpaper)
+                TrayAction(Icons.Default.AddBox, "Widgets", RumbPalette.Green, !layoutLocked, onWidgets)
+                TrayAction(Icons.Default.GridView, "Settings", RumbPalette.Blue, true, onLayoutAndClock)
+            }
+            androidx.compose.material3.Button(
+                onClick = onDone,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(52.dp),
+                shape = CircleShape,
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Done", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -134,14 +152,24 @@ fun VisualStylePreview(style: VisualStyle, selected: Boolean, onSelect: (VisualS
 }
 
 @Composable
-private fun TrayAction(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit) {
+private fun RowScope.TrayAction(icon: ImageVector, label: String, tint: Color, enabled: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val scale by pressScale(interaction, .94f)
     Column(
-        Modifier.size(width = 82.dp, height = 64.dp).clip(RoundedCornerShape(18.dp))
-            .clickable(role = Role.Button, onClick = onClick).padding(vertical = 7.dp),
+        Modifier.weight(1f)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = if (enabled) 1f else .45f
+            }
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current, role = Role.Button, onClick = onClick)
+            .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(23.dp))
-        Text(label, color = tint, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        FilledIcon(icon, tint, size = 40.dp)
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
