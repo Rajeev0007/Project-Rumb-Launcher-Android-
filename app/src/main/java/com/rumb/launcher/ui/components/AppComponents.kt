@@ -149,14 +149,16 @@ fun AppTile(
     labelColor: Color = Color.White,
     labelShadow: Boolean = true,
     showLabel: Boolean = true,
+    badged: Boolean = false,
+    pressed: Boolean = false,
     onClick: ((LaunchSource?) -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
     val tracker = rememberLaunchSourceTracker()
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
+    val clickPressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) .88f else 1f,
+        targetValue = if (pressed || clickPressed) .88f else 1f,
         animationSpec = spring(dampingRatio = .6f, stiffness = Spring.StiffnessMediumLow),
         label = "app press scale",
     )
@@ -174,17 +176,25 @@ fun AppTile(
         modifier = modifier.then(clickModifier).padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        AppIconImage(
-            appId = app.id,
-            iconLoader = iconLoader,
-            size = iconSize,
-            appearance = appearance,
-            contentDescription = "${app.label}${app.profileLabel?.let { ", $it profile" }.orEmpty()}",
-            modifier = Modifier.trackLaunchSource(tracker).graphicsLayer {
+        Box(
+            Modifier.trackLaunchSource(tracker).graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             },
-        )
+        ) {
+            AppIconImage(
+                appId = app.id,
+                iconLoader = iconLoader,
+                size = iconSize,
+                appearance = appearance,
+                contentDescription = buildString {
+                    append(app.label)
+                    app.profileLabel?.let { append(", $it profile") }
+                    if (badged) append(", has notifications")
+                },
+            )
+            if (badged) NotificationDot(iconSize, Modifier.align(Alignment.TopEnd))
+        }
         if (showLabel) {
             Spacer(Modifier.height(5.dp))
             TileLabel(app.label, labelColor, labelShadow, maxLines = 2)
@@ -202,6 +212,7 @@ fun FolderTile(
     appearance: IconAppearance,
     modifier: Modifier = Modifier,
     showLabel: Boolean = true,
+    badged: Boolean = false,
 ) {
     val shape = RoundedCornerShape(iconSize * .3f)
     val inset = iconSize * .12f
@@ -211,20 +222,23 @@ fun FolderTile(
         modifier = modifier.padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier.size(iconSize).clip(shape).background(Color.White.copy(alpha = .22f))
-                .border(BorderStroke(1.dp, Color.White.copy(alpha = .30f)), shape)
-                .padding(inset),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(gap)) {
-                apps.take(4).chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                        row.forEach { app ->
-                            AppIconImage(app.id, iconLoader, mini, appearance.copy(shape = IconShape.SYSTEM), contentDescription = null)
+        Box {
+            Box(
+                Modifier.size(iconSize).clip(shape).background(Color.White.copy(alpha = .22f))
+                    .border(BorderStroke(1.dp, Color.White.copy(alpha = .30f)), shape)
+                    .padding(inset),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                    apps.take(4).chunked(2).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                            row.forEach { app ->
+                                AppIconImage(app.id, iconLoader, mini, appearance.copy(shape = IconShape.SYSTEM), contentDescription = null)
+                            }
                         }
                     }
                 }
             }
+            if (badged) NotificationDot(iconSize, Modifier.align(Alignment.TopEnd))
         }
         if (showLabel) {
             Spacer(Modifier.height(5.dp))
@@ -232,6 +246,17 @@ fun FolderTile(
         }
     }
 }
+
+/** A small high-contrast dot that reads on any wallpaper. */
+@Composable
+fun NotificationDot(iconSize: Dp, modifier: Modifier = Modifier) {
+    Box(
+        modifier.size(iconSize * .26f).clip(CircleShape).background(NotificationDotColor)
+            .border(1.5.dp, Color.White, CircleShape),
+    )
+}
+
+private val NotificationDotColor = Color(0xFFFF5B5B)
 
 @Composable
 private fun TileLabel(text: String, color: Color, shadow: Boolean, maxLines: Int) {

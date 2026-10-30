@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Rumb Launcher Next</string>
+    <string name="notification_dots_label">Rumb notification dots</string>
+    <string name="lock_service_label">Rumb screen lock</string>
+    <string name="lock_service_description">Lets Rumb Launcher turn off and lock the screen when you use the Lock screen gesture on Home. This service only triggers Android\'s lock action. It does not observe your actions, read screen content, or receive any accessibility events.</string>
 </resources>

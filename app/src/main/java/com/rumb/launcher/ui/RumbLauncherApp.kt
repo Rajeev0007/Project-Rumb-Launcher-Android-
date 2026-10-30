@@ -50,7 +50,12 @@ import com.rumb.launcher.feature.home.HomeScreen
 import com.rumb.launcher.feature.quickpanel.QuickPanelScreen
 import com.rumb.launcher.feature.settings.SettingsScreen
 import com.rumb.launcher.platform.LauncherActivityController
+import com.rumb.launcher.ui.components.AppIconImage
 import com.rumb.launcher.ui.components.visualTokens
+import com.rumb.launcher.domain.IconAppearance
+import com.rumb.launcher.platform.icons.AppIconLoader
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import com.rumb.launcher.ui.theme.RumbLauncherTheme
 
 @Composable
@@ -65,6 +70,14 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
     val scope = rememberCoroutineScope()
     val drawer = remember(scope) { DrawerController(scope) }
     val drawerHidden by remember { derivedStateOf { drawer.fraction >= DrawerController.CLOSED } }
+    val dragController = remember(model) {
+        AppDragController { app, drop ->
+            when (drop) {
+                is ExternalDrop.Cell -> model.dropAppOnHome(app, drop.page, drop.cell)
+                ExternalDrop.Dock -> model.addToDock(app)
+            }
+        }
+    }
     val drawerScroll = remember(drawer, model) {
         drawer.nestedScrollConnection { open -> model.navigate(if (open) Destination.DRAWER else Destination.HOME) }
     }
@@ -94,8 +107,10 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
             controller.onHomeIntent = null
         }
     }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.refreshCapabilities() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         model.onStop()
+        dragController.cancel()
         // Coming back to the launcher should show Home, not a half-forgotten library or panel.
         if (state.destination == Destination.DRAWER || state.destination == Destination.QUICK_PANEL) {
             model.navigate(Destination.HOME)
@@ -172,6 +187,7 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                 onRemoveWidget = { itemId ->
                     model.removeWidget(itemId)?.let(controller::deleteWidgetId)
                 },
+                dragController = dragController,
             )
 
             // The library stays composed so opening it never pays a first-frame cost; while closed it
@@ -202,6 +218,8 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                 },
                 onWebSearch = model::webSearch,
                 onStoreSearch = model::storeSearch,
+                dragController = dragController,
+                onDragToHomeStarted = { model.navigate(Destination.HOME) },
                 modifier = Modifier
                     .graphicsLayer {
                         val fraction = drawer.fraction
@@ -274,6 +292,11 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                         onDoubleTap = model::updateDoubleTap,
                         onPinch = model::updatePinch,
                         onHaptics = model::updateHaptics,
+                        notificationAccess = state.notificationAccess,
+                        lockServiceConnected = state.lockServiceConnected,
+                        onNotificationDots = model::updateNotificationDots,
+                        onOpenNotificationAccess = model::openNotificationAccess,
+                        onOpenAccessibilitySettings = model::openAccessibilitySettings,
                         onHomeSettings = model.systemActions::openHomeSettings,
                         onWallpaper = model.systemActions::openWallpaperPicker,
                         onExport = { controller.exportJson(model.exportJson()) },
@@ -281,6 +304,8 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                     )
                 }
             }
+
+            DraggedAppIcon(dragController, model.iconLoader, state.settings.iconSize.dp, state.settings.iconAppearance)
 
             SnackbarHost(hostState = snackbars, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         }
@@ -306,6 +331,7 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                 onInfo = { model.systemActions.openAppInfo(app) },
                 onShortcut = model::launchShortcut,
                 onRename = { label -> model.renameApp(app.id, label) },
+                onUninstall = { model.uninstall(app) },
             )
         }
         state.openedFolder?.let { folder ->
@@ -316,6 +342,7 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                 appearance = appearance,
                 accent = accent,
                 editable = !state.settings.layoutLocked,
+                badges = state.badges,
                 onDismiss = { model.openFolder(null) },
                 onLaunch = { app, source ->
                     model.launch(app, source)
@@ -331,3 +358,30 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
 
 /** Overlays sit above a live Home screen; make sure touches on their empty areas never reach it. */
 private fun Modifier.blockTouchesBelow(): Modifier = pointerInput(Unit) {}
+
+/** The app lifted out of the library, drawn above everything and following the finger. */
+@Composable
+private fun DraggedAppIcon(
+    controller: AppDragController,
+    iconLoader: AppIconLoader,
+    iconSize: Dp,
+    appearance: IconAppearance,
+) {
+    val app = controller.app ?: return
+    val halfPx = with(LocalDensity.current) { iconSize.toPx() / 2f }
+    AppIconImage(
+        appId = app.id,
+        iconLoader = iconLoader,
+        size = iconSize,
+        appearance = appearance,
+        contentDescription = null,
+        modifier = Modifier.graphicsLayer {
+            val position = controller.position
+            translationX = position.x - halfPx
+            translationY = position.y - halfPx * 1.6f
+            scaleX = 1.16f
+            scaleY = 1.16f
+            alpha = .94f
+        },
+    )
+}

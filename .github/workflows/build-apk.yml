@@ -9,6 +9,7 @@ on:
       - fix/full-release-apk
       - feature/reference-ui-install-fix
       - feature/v3.1-smooth-launcher
+      - feature/v3.2-power-features
   pull_request:
     branches:
       - main
@@ -74,6 +75,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           case "$GITHUB_REF_NAME" in
+            feature/v3.2-power-features)
+              TAG="v3.2.0"
+              TITLE="Rumb Launcher Next v3.2.0"
+              ;;
             feature/v3.1-smooth-launcher)
               TAG="v3.1.0"
               TITLE="Rumb Launcher Next v3.1.0"
@@ -108,5 +113,5 @@ jobs:
             gh release create "$TAG" "$APK" "$APK.sha256" \
               --target "$GITHUB_SHA" \
               --title "$TITLE" \
-              --notes "Signed full release for Android 8.0 or newer. V3.x installs as com.rumb.launcher.next to avoid conflicts with old Rumb certificates. Code and resources are not minified or shrunk, and the app has no network permission, notification-listener service, or direct uninstall capability."
+              --notes "Signed full release for Android 8.0 or newer. V3.x installs as com.rumb.launcher.next to avoid conflicts with old Rumb certificates. Code and resources are not minified or shrunk, and the app has no network permission. Notification dots and the screen-lock gesture are opt-in and need the user to grant access in Android Settings."
           fi

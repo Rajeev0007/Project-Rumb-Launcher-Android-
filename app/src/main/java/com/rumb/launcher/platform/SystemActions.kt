@@ -2,6 +2,7 @@ package com.rumb.launcher.platform
 
 import android.app.SearchManager
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -46,6 +47,21 @@ class SystemActions(context: Context) {
         if (text.isEmpty()) return
         start(Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(text)}&c=apps")))
     }
+
+    /** Asks Android's package installer to uninstall; Android shows its own confirmation. */
+    fun uninstall(packageName: String) = start(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")))
+
+    fun openNotificationAccess(component: ComponentName) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        start(
+            Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component.flattenToString()),
+            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+        )
+    } else {
+        start(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    }
+
+    fun openAccessibilitySettings() = start(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 
     fun toast(message: String) = Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
 

@@ -2,6 +2,7 @@ package com.rumb.launcher.platform.apps
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
 import android.content.pm.ShortcutInfo
@@ -23,7 +24,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -43,8 +47,18 @@ class LauncherAppsCatalog(context: Context) : AutoCloseable {
     @Volatile private var activityInfoByKey: Map<String, LauncherActivityInfo> = emptyMap()
     @Volatile private var usersBySerial: Map<Long, UserHandle> = emptyMap()
 
+    private val mutableRemovals = MutableSharedFlow<PackageRemoval>(extraBufferCapacity = 16)
+
+    /** Emits when an app is uninstalled (not when it is updated or temporarily unavailable). */
+    val removals: SharedFlow<PackageRemoval> = mutableRemovals.asSharedFlow()
+
     private val callback = object : LauncherApps.Callback() {
-        override fun onPackageRemoved(packageName: String, user: UserHandle) = refresh()
+        override fun onPackageRemoved(packageName: String, user: UserHandle) {
+            userManager?.getSerialNumberForUser(user)?.takeIf { it >= 0 }?.let {
+                mutableRemovals.tryEmit(PackageRemoval(packageName, it))
+            }
+            refresh()
+        }
         override fun onPackageAdded(packageName: String, user: UserHandle) = refresh()
         override fun onPackageChanged(packageName: String, user: UserHandle) = refresh()
         override fun onPackagesAvailable(packageNames: Array<out String>, user: UserHandle, replacing: Boolean) = refresh()
@@ -155,6 +169,7 @@ class LauncherAppsCatalog(context: Context) : AutoCloseable {
                     activityName = info.componentName.className,
                     profileLabel = profileLabel,
                     isWorkProfile = workProfile,
+                    isSystemApp = info.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0,
                 )
             }
         }.distinctBy { it.id.stableKey }.sortedWith { left, right -> collator.compare(left.label, right.label) }
@@ -170,3 +185,5 @@ class LauncherAppsCatalog(context: Context) : AutoCloseable {
         scope.cancel()
     }
 }
+
+data class PackageRemoval(val packageName: String, val profileSerial: Long)

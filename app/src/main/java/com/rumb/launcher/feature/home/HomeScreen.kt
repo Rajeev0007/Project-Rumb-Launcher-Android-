@@ -53,6 +53,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -73,7 +75,9 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -105,6 +109,7 @@ import com.rumb.launcher.domain.occupiedCells
 import com.rumb.launcher.feature.customize.HomeCustomizeTray
 import com.rumb.launcher.platform.apps.LaunchSource
 import com.rumb.launcher.platform.icons.AppIconLoader
+import com.rumb.launcher.ui.AppDragController
 import com.rumb.launcher.ui.components.AppTile
 import com.rumb.launcher.ui.components.FolderTile
 import com.rumb.launcher.ui.components.LauncherClock
@@ -116,6 +121,8 @@ import com.rumb.launcher.ui.components.trackLaunchSource
 import com.rumb.launcher.ui.components.visualTokens
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun HomeScreen(
@@ -144,9 +151,11 @@ fun HomeScreen(
     onCreateWidgetView: (Int, String) -> AppWidgetHostView?,
     onUpdateWidgetSize: (AppWidgetHostView, Int, Int) -> Unit,
     onRemoveWidget: (String) -> Unit,
+    dragController: AppDragController,
     modifier: Modifier = Modifier,
 ) {
     val settings = state.settings
+    val badges = state.badges
     val tokens = visualTokens(settings.visualStyle)
     val appearance = settings.iconAppearance
     val pagerState = rememberPagerState(pageCount = { settings.pageCount })
@@ -175,7 +184,51 @@ fun HomeScreen(
         if (settings.clockStyle == ClockStyle.HIDDEN && !settings.layoutLocked) interactiveBounds.remove("clock")
     }
     LaunchedEffect(settings.homeSearchBar) { if (!settings.homeSearchBar) interactiveBounds.remove("search") }
-    LaunchedEffect(pagerState) { snapshotFlow { pagerState.currentPage }.collect { onPageChanged(it) } }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            dragController.currentPage = page
+            onPageChanged(page)
+        }
+    }
+
+    // Geometry for drops from the library. Bounds are measured relative to this screen's own root,
+    // so the library's open/close scale applied above Home never skews the target cell.
+    val homeRef = remember { CoordinatesRef() }
+    val pagerRef = remember { CoordinatesRef() }
+    val dockRef = remember { CoordinatesRef() }
+    val pagePaddingPx = with(density) { 10.dp.toPx() }
+    DisposableEffect(dragController, pagePaddingPx) {
+        dragController.gridBounds = {
+            homeRef.boundsOf(pagerRef)?.let { Rect(it.left + pagePaddingPx, it.top, it.right - pagePaddingPx, it.bottom) }
+        }
+        dragController.dockBounds = { homeRef.boundsOf(dockRef) }
+        onDispose {
+            dragController.gridBounds = { null }
+            dragController.dockBounds = { null }
+        }
+    }
+    SideEffect {
+        dragController.columns = settings.columns
+        dragController.rows = settings.rows
+    }
+    val externalDropCell by remember(dragController) {
+        derivedStateOf { if (dragController.isDragging) dragController.cellAt(dragController.position) else null }
+    }
+    val currentPageCount by rememberUpdatedState(settings.pageCount)
+    val edgePx = with(density) { 32.dp.toPx() }
+    LaunchedEffect(dragController, pagerState, edgePx) {
+        snapshotFlow {
+            if (dragController.isDragging) dragController.edgeDirection(dragController.position, edgePx) else 0
+        }.collectLatest { direction ->
+            if (direction == 0) return@collectLatest
+            while (true) {
+                delay(650)
+                val target = pagerState.currentPage + direction
+                if (target !in 0 until currentPageCount) break
+                pagerState.animateScrollToPage(target)
+            }
+        }
+    }
     val dockLaunch: (InstalledApp, LaunchSource?) -> Unit = if (editMode) { _, _ -> onExitEditMode() } else onLaunch
     LaunchedEffect(homePressSignal) {
         if (homePressSignal > 0 && pagerState.currentPage != 0) pagerState.animateScrollToPage(0)
@@ -183,6 +236,7 @@ fun HomeScreen(
 
     Box(
         modifier.fillMaxSize()
+            .onPlaced { homeRef.value = it }
             .pointerInput(editMode) {
                 if (editMode) return@pointerInput
                 val swipeThreshold = 96.dp.toPx()
@@ -361,7 +415,7 @@ fun HomeScreen(
                     )
                     else -> HorizontalPager(
                         state = pagerState,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).onPlaced { pagerRef.value = it },
                         beyondViewportPageCount = 1,
                         userScrollEnabled = pagerScrollEnabled,
                     ) { page ->
@@ -373,6 +427,8 @@ fun HomeScreen(
                             iconLoader = iconLoader,
                             interactionsEnabled = !editMode,
                             showRemoveWidget = editMode && !settings.layoutLocked,
+                            badges = badges,
+                            externalTarget = if (page == pagerState.currentPage) externalDropCell else null,
                             onLaunch = onLaunch,
                             onAppMenu = onAppMenu,
                             onOpenFolder = onOpenFolder,
@@ -402,6 +458,9 @@ fun HomeScreen(
                     onAppMenu = onAppMenu,
                     onOpenDrawer = onOpenDrawer,
                     onBounds = { interactiveBounds["dock"] = it },
+                    badges = badges,
+                    coordinatesRef = dockRef,
+                    highlighted = dragController.isDragging,
                 )
             }
         }
@@ -436,6 +495,8 @@ private fun HomePage(
     iconLoader: AppIconLoader,
     interactionsEnabled: Boolean,
     showRemoveWidget: Boolean,
+    badges: Set<String>,
+    externalTarget: Int?,
     onLaunch: (InstalledApp, LaunchSource?) -> Unit,
     onAppMenu: (InstalledApp) -> Unit,
     onOpenFolder: (HomeItem) -> Unit,
@@ -457,7 +518,10 @@ private fun HomePage(
         val cellWidthPx = with(density) { cellWidth.toPx() }
         val cellHeightPx = with(density) { cellHeight.toPx() }
 
-        dropTarget?.let { target ->
+        val shownTarget = dropTarget ?: externalTarget?.let { cell ->
+            DropTarget(EXTERNAL_DRAG_ID, cell, classifyExternalDrop(items, cell, columns, rows))
+        }
+        shownTarget?.let { target ->
             val color = when (target.kind) {
                 DropKind.MOVE -> Color.White.copy(alpha = .16f)
                 DropKind.GROUP -> tokens.accent.copy(alpha = .38f)
@@ -517,6 +581,7 @@ private fun HomePage(
                                     iconSize = settings.iconSize.dp,
                                     appearance = appearance,
                                     showLabel = settings.showHomeLabels,
+                                    badged = app.badgeKey in badges,
                                 )
                             }
                         }
@@ -535,9 +600,11 @@ private fun HomePage(
                             onTarget = onTarget,
                             onMove = { dc, dr -> onMoveItem(item.id, dc, dr) },
                         ) {
+                            val folderApps = item.appIds.mapNotNull(appsById::get)
                             FolderTile(
                                 folder = item,
-                                apps = item.appIds.mapNotNull(appsById::get),
+                                apps = folderApps,
+                                badged = badges.isNotEmpty() && folderApps.any { it.badgeKey in badges },
                                 iconLoader = iconLoader,
                                 iconSize = settings.iconSize.dp,
                                 appearance = appearance,
@@ -557,6 +624,25 @@ private fun HomePage(
                 }
             }
         }
+    }
+}
+
+private const val EXTERNAL_DRAG_ID = "external-drag"
+
+/** Mirrors [com.rumb.launcher.LauncherViewModel.dropAppOnHome] for apps dragged in from the library. */
+private fun classifyExternalDrop(items: List<HomeItem>, cell: Int, columns: Int, rows: Int): DropKind {
+    val occupant = items.firstOrNull { cell in occupiedCells(it, columns, rows) } ?: return DropKind.MOVE
+    return if (occupant.cell == cell && occupant.type != HomeItemType.WIDGET) DropKind.GROUP else DropKind.BLOCKED
+}
+
+/** Holds layout coordinates without triggering recomposition. */
+private class CoordinatesRef {
+    var value: LayoutCoordinates? = null
+
+    fun boundsOf(child: CoordinatesRef): Rect? {
+        val parent = value?.takeIf { it.isAttached } ?: return null
+        val target = child.value?.takeIf { it.isAttached } ?: return null
+        return runCatching { parent.localBoundingBoxOf(target, clipBounds = false) }.getOrNull()
     }
 }
 
@@ -784,12 +870,22 @@ private fun Dock(
     onAppMenu: (InstalledApp) -> Unit,
     onOpenDrawer: () -> Unit,
     onBounds: (Rect) -> Unit,
+    badges: Set<String>,
+    coordinatesRef: CoordinatesRef,
+    highlighted: Boolean,
 ) {
     val tokens = visualTokens(style)
+    val dockScale by animateFloatAsState(if (highlighted) 1.04f else 1f, label = "dock drop scale")
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
         VisualDockSurface(
             style = style,
-            modifier = Modifier.wrapContentWidth().onGloballyPositioned { onBounds(it.boundsInRoot()) },
+            modifier = Modifier.wrapContentWidth()
+                .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+                .onPlaced { coordinatesRef.value = it }
+                .graphicsLayer {
+                    scaleX = dockScale
+                    scaleY = dockScale
+                },
         ) {
             Row(
                 Modifier.wrapContentWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -803,6 +899,7 @@ private fun Dock(
                         iconSize = 44.dp,
                         appearance = appearance,
                         showLabel = false,
+                        badged = app.badgeKey in badges,
                         modifier = Modifier.width(54.dp),
                         onClick = { source -> onLaunch(app, source) },
                         onLongClick = { onAppMenu(app) },
