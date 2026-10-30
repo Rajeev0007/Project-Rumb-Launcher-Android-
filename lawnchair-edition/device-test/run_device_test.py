@@ -130,7 +130,44 @@ def swipe(x1: int, y1: int, x2: int, y2: int, ms: int = 350) -> None:
 
 
 def drawer_is_open(root: ET.Element | None) -> bool:
-    return len(drawer_apps(root)) > 6 or find(root, "Search apps") is not None
+    """True when any launcher's app list is on screen (works for the stock launcher too)."""
+    if root is None:
+        return False
+    for node in root.iter("node"):
+        if node.get("resource-id", "").endswith(":id/apps_list_view"):
+            l, t, r, b = bounds(node)
+            if b - t > H // 3 and t < H // 2:
+                return True
+    return False
+
+
+def slow_drag(y1: int, y2: int, steps: int = 16, pause: float = 0.05) -> None:
+    """A finger-like drag: down, small moves with pauses, a short hold, then up."""
+    x = W // 2
+    shell(f"input motionevent DOWN {x} {y1}")
+    for i in range(1, steps + 1):
+        shell(f"input motionevent MOVE {x} {y1 + (y2 - y1) * i // steps}")
+        time.sleep(pause)
+    time.sleep(0.15)
+    shell(f"input motionevent UP {x} {y2}")
+
+
+def swipe_experiments(label: str) -> dict:
+    """Try several swipe styles and record which open the drawer."""
+    results = {}
+    trials = {
+        "swipe-1000ms": lambda: swipe(W // 2, int(H * 0.65), W // 2, int(H * 0.20), 1000),
+        "swipe-250ms": lambda: swipe(W // 2, int(H * 0.65), W // 2, int(H * 0.20), 250),
+        "slow-drag": lambda: slow_drag(int(H * 0.65), int(H * 0.20)),
+    }
+    for name, action in trials.items():
+        go_home(2)
+        action()
+        time.sleep(3)
+        results[name] = drawer_is_open(dump())
+        go_home(2)
+    log(f"  swipe experiments on {label}: {results}")
+    return results
 
 
 def open_drawer(name: str = "drawer") -> bool:
@@ -249,6 +286,14 @@ def crashes() -> str:
 # --------------------------------------------------------------------------------------
 W, H = screen_size()
 log(f"screen {W}x{H}, Android {shell('getprop ro.build.version.release').strip()}")
+
+# Control: the emulator's own launcher, with the same swipes, before Rumb is installed.
+stock = shell("cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN").strip().splitlines()[-1]
+log(f"stock launcher: {stock}")
+shell("am start -W -a android.intent.action.MAIN -c android.intent.category.HOME")
+time.sleep(8)
+stock_results = swipe_experiments("stock launcher")
+
 adb("install", "-r", "-g", apk, check=True, timeout=300)
 adb("logcat", "-c")
 shell(f"cmd package set-home-activity {HOME}")
@@ -259,6 +304,10 @@ dismiss_dialogs()
 go_home()
 
 step("01-home")
+rumb_results = swipe_experiments("Rumb")
+for name, ok in rumb_results.items():
+    if stock_results.get(name) and not ok:
+        problems.append(f"drawer: '{name}' opens the stock launcher's drawer but not Rumb's")
 open_drawer("02-drawer")
 root = step("02-drawer", 1)
 check_drawer("02-drawer", root)
