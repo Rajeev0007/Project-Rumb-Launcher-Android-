@@ -136,9 +136,9 @@ def drawer_is_open(root: ET.Element | None) -> bool:
 def open_drawer(name: str = "drawer") -> bool:
     """Swipe up like a finger would; check the drawer really opened; fall back to the menu."""
     attempts = [
-        (int(H * 0.62), int(H * 0.18), 450),   # from the middle of Home
-        (int(H * 0.70), int(H * 0.15), 700),   # slower and longer
-        (int(H * 0.80), int(H * 0.20), 900),   # from the dock
+        (int(H * 0.65), int(H * 0.20), 1000),  # a steady swipe from the middle of Home
+        (int(H * 0.80), int(H * 0.20), 1000),  # from the dock
+        (int(H * 0.70), int(H * 0.15), 600),   # quicker
     ]
     for index, (y1, y2, ms) in enumerate(attempts, 1):
         # Grab a frame halfway through the gesture to see what the drawer is doing.
@@ -165,18 +165,31 @@ def open_drawer(name: str = "drawer") -> bool:
     return False
 
 
-def drawer_apps(root: ET.Element | None) -> list[tuple[str, tuple[int, int, int, int]]]:
-    """App cells in the drawer: clickable TextViews with a label, below the search bar."""
-    apps = []
+SKIP_IDS = (":id/hotseat", ":id/workspace")
+
+
+def drawer_apps(root: ET.Element | None, area: str = "all") -> list[tuple[str, tuple[int, int, int, int]]]:
+    """App cells in the drawer (not the dock or Home behind it).
+
+    area: "all", "grid" (A-Z list) or "suggested" (the suggested-apps row).
+    """
+    apps: list = []
     if root is None:
         return apps
-    for node in root.iter("node"):
-        if node.get("package") != PKG or node.get("class") != "android.widget.TextView":
-            continue
-        label = node.get("text") or node.get("content-desc") or ""
-        if not label or node.get("clickable") != "true":
-            continue
-        apps.append((label, bounds(node)))
+
+    def walk(node: ET.Element, in_prediction: bool) -> None:
+        rid = node.get("resource-id", "")
+        if any(rid.endswith(s) for s in SKIP_IDS):
+            return
+        in_prediction = in_prediction or rid.endswith(":id/prediction_row")
+        if (node.get("package") == PKG and node.get("class") == "android.widget.TextView"
+                and node.get("clickable") == "true" and (node.get("text") or node.get("content-desc"))):
+            if area == "all" or (area == "suggested") == in_prediction:
+                apps.append((node.get("text") or node.get("content-desc"), bounds(node)))
+        for child in node:
+            walk(child, in_prediction)
+
+    walk(root, False)
     return apps
 
 
@@ -214,6 +227,16 @@ def check_drawer(name: str, root: ET.Element | None, expect_list: bool = False) 
             gaps = [first[i + 1][1][0] - first[i][1][0] for i in range(len(first) - 1)]
             if gaps and max(gaps) - min(gaps) > 8:
                 issues.append(f"uneven column spacing {gaps}")
+    suggested = drawer_apps(root, "suggested")
+    grid = drawer_apps(root, "grid")
+    if suggested and grid and not expect_list:
+        first_row_top = min(b[1] for _, b in grid)
+        first_row = sorted([b for _, b in grid if b[1] == first_row_top], key=lambda b: b[0])
+        tops = sorted([b for _, b in suggested], key=lambda b: b[0])
+        offsets = [((a[0] + a[2]) // 2) - ((b[0] + b[2]) // 2) for a, b in zip(tops, first_row)]
+        log(f"  {name}: suggested row vs grid column centre offsets {offsets}")
+        if offsets and max(abs(o) for o in offsets) > 4:
+            issues.append(f"suggested apps are out of line with the grid by {offsets} px")
     for issue in issues[:12]:
         log(f"  ! {name}: {issue}")
     problems.extend(f"{name}: {issue}" for issue in issues)
@@ -278,15 +301,14 @@ for preset in PRESETS:
         node = find(root, preset)
         if node is not None:
             break
-        first = find(root, "Pixel") or find(root, "One-tap looks")
-        y = (bounds(first)[1] + bounds(first)[3]) // 2 if first is not None else int(H * 0.35)
-        swipe(int(W * 0.80), y, int(W * 0.40), y, 600)
+        swipe(W // 2, int(H * 0.70), W // 2, int(H * 0.45), 600)
         time.sleep(1.5)
         root = dump()
     if node is None:
         screenshot(f"p-{slug}-0-not-found")
         log(f"  ! preset {preset} not found on the Styles screen")
         problems.append(f"styles: preset {preset} not found")
+        go_home()
         continue
     tap_node(node)
     log(f"applied {preset}")
@@ -300,6 +322,7 @@ for preset in PRESETS:
     go_home()
 
 # Widget picker: long-press Home, open Widgets, look for Rumb's widgets.
+go_home()
 swipe(W // 2, int(H * 0.45), W // 2, int(H * 0.45), 1200)
 time.sleep(2)
 if tap_text("Widgets", wait=4):

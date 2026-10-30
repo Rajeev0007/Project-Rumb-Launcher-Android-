@@ -12,7 +12,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -195,6 +193,8 @@ private fun applyStyle(
     }
     prefs.themedIcons.set(style.themedIcons)
     prefs.drawerThemedIcons.set(style.themedIcons)
+    // Nova-style looks theme every icon, including apps without a monochrome icon.
+    prefs.forceIconMonochrome.set(style.themedIcons)
     prefs.launcherTheme.set(style.theme)
     prefs2.homeIconSizeFactor.setBlocking(style.homeIconSize)
     setListDrawer(prefs, prefs2, style.listDrawer)
@@ -244,18 +244,26 @@ fun RumbStylesPreferences(
             heading = "One-tap looks",
             description = "Applies icon shape and style, dock, folders, drawer, theme and accent together. Rumb restarts once to apply colours.",
         ) {
-            Row(
+            // Two cards per row so every look is visible without sideways scrolling.
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                RumbStylePresets.forEach { style ->
-                    StyleCard(style) {
-                        if (style.wantsBlur && !hasPermission) showPermissionDialog = true
-                        applyStyle(context, style, prefs, prefs2, hasPermission)
-                        Toast.makeText(context, "${style.name} style applied", Toast.LENGTH_SHORT).show()
+                RumbStylePresets.chunked(2).forEach { pair ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        pair.forEach { style ->
+                            StyleCard(style, Modifier.weight(1f)) {
+                                if (style.wantsBlur && !hasPermission) showPermissionDialog = true
+                                applyStyle(context, style, prefs, prefs2, hasPermission)
+                                Toast.makeText(context, "${style.name} style applied", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -370,7 +378,7 @@ fun RumbStylesPreferences(
 }
 
 @Composable
-private fun StyleCard(style: RumbStyle, onClick: () -> Unit) {
+private fun StyleCard(style: RumbStyle, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val iconShape: Shape = when (style.iconShape) {
         "circle" -> CircleShape
         "cupertino" -> RoundedCornerShape(30)
@@ -378,8 +386,7 @@ private fun StyleCard(style: RumbStyle, onClick: () -> Unit) {
         else -> RoundedCornerShape(18)
     }
     Column(
-        modifier = Modifier
-            .width(156.dp)
+        modifier = modifier
             .clip(RoundedCornerShape(24.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .clickable(onClick = onClick)

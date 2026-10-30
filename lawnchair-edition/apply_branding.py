@@ -112,6 +112,22 @@ CODE_PATCHES = [
         "        setUpBackground();\n"
         "        setLayoutParams(lp);\n",
     ),
+    # Bug fix: the suggested-apps row in the drawer was padded by left + right padding on
+    # each side, so it sat further in than the app grid and its icons did not line up
+    # with the columns below it.
+    (
+        "src/com/android/launcher3/allapps/FloatingHeaderView.java",
+        "        int leftRightPadding = dp.allAppsPadding.left + dp.allAppsPadding.right;\n"
+        "        setPadding(leftRightPadding, getPaddingTop(), leftRightPadding, getPaddingBottom());\n",
+        "        setPadding(dp.allAppsPadding.left, getPaddingTop(), dp.allAppsPadding.right, getPaddingBottom());\n",
+    ),
+    # Bug fix: the "All apps" label took the phone's light/dark colour instead of Rumb's
+    # theme, so it vanished (dark on dark) with the Dark theme on a light-mode phone.
+    (
+        "quickstep/src/com/android/launcher3/appprediction/AppsDividerView.java",
+        "        mAllAppsLabelTextColor = context.getColor(R.color.materialColorOnSurface);\n",
+        "        mAllAppsLabelTextColor = Themes.getAttrColor(context, android.R.attr.textColorSecondary);\n",
+    ),
     # Styles screen: route, navigation, and a dashboard entry right after General.
     (
         "lawnchair/src/app/lawnchair/ui/preferences/navigation/PreferenceRoutes.kt",
