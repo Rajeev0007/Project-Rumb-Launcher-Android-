@@ -7,6 +7,9 @@ A Pixel-style Android home screen by **Rajeev0007**, built on [Lawnchair](https:
 ## Rumb style
 - Rumb name, new logo, and About page (developer, GitHub, updates, feedback)
 - Rumb violet accent, squircle icons, rounder cards and dialogs, fuzzy app search
+- **Styles** (Settings → Styles): one-tap Pixel, Glass (iPhone style), One UI, Gradient, and Minimal looks
+- Blur and glass: wallpaper blur, drawer and folder opacity, translucent recents
+- Gradient dock that fades into your accent colour, with transparency and corner radius
 - Icon changer on by default: long-press any app → Edit to pick a new icon from a pack
 - Home long-press menu includes edit, lock, and system-settings shortcuts
 - No upstream announcements or contributor feeds

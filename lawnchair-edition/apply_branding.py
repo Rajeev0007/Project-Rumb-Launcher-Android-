@@ -18,9 +18,76 @@ APPLICATION_ID = "com.rumb.launcher.next"
 
 # Every user-visible string that says "Lawnchair" is renamed, in every language.
 # Short provider names (a string whose whole text is "Lawnchair") become "Rumb".
-# Kept: the sponsored-search disclosure, because it states a real revenue deal with
-# Lawnchair, and licence credits, which stay on the About screen's licences entry.
-KEEP_STRINGS = {"search_provider_sponsored_description"}
+# No search provider is sponsored at the pinned commit, so no disclosure is kept.
+# The licence notice lives in Settings > About > Open-source licences (overlay).
+KEEP_STRINGS: set[str] = set()
+
+# Code patches: (file, anchor, replacement). Each anchor must appear exactly once.
+CODE_PATCHES = [
+    # A preference for the gradient dock.
+    (
+        "lawnchair/src/app/lawnchair/preferences/PreferenceManager.kt",
+        '    val hotseatBGAlpha = IntPref("pref_hotseatBGTransparency", 100, recreate)\n',
+        '    val hotseatBGAlpha = IntPref("pref_hotseatBGTransparency", 100, recreate)\n'
+        '    val rumbDockGradient = BoolPref("pref_rumbDockGradient", false, recreate)\n',
+    ),
+    # Draw the dock as a dock-colour to accent-colour gradient when enabled.
+    (
+        "src/com/android/launcher3/Hotseat.java",
+        "        background.setColor(finalColor);\n",
+        "        if (preferenceManager.getRumbDockGradient().get()) {\n"
+        "            int accent = com.android.launcher3.util.Themes.getAttrColor(getContext(), android.R.attr.colorAccent);\n"
+        "            int accentColor = Color.argb(alphaValue, Color.red(accent), Color.green(accent), Color.blue(accent));\n"
+        "            background.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);\n"
+        "            background.setColors(new int[] {finalColor, accentColor});\n"
+        "        } else {\n"
+        "            background.setColor(finalColor);\n"
+        "        }\n",
+    ),
+    # Styles screen: route, navigation, and a dashboard entry right after General.
+    (
+        "lawnchair/src/app/lawnchair/ui/preferences/navigation/PreferenceRoutes.kt",
+        "@Serializable\ndata object HomeScreen : PreferenceRootRoute, PreferenceDeepLink {\n",
+        "@Serializable\ndata object RumbStyles : PreferenceRootRoute, PreferenceDeepLink {\n"
+        '    override val deepLink = "$URI/styles"\n}\n\n'
+        "@Serializable\ndata object HomeScreen : PreferenceRootRoute, PreferenceDeepLink {\n",
+    ),
+    (
+        "lawnchair/src/app/lawnchair/ui/preferences/navigation/PreferenceNavigation.kt",
+        "        composable<General>(\n",
+        "        composable<RumbStyles>(\n"
+        "            deepLinks = getDeepLink(RumbStyles),\n"
+        "        ) { app.lawnchair.ui.preferences.destinations.RumbStylesPreferences() }\n"
+        "        composable<General>(\n",
+    ),
+    (
+        "lawnchair/src/app/lawnchair/ui/preferences/destinations/PreferencesDashboard.kt",
+        "                onNavigate = { onNavigate(General) },\n"
+        "                isSelected = currentRoute is General,\n"
+        "            )\n",
+        "                onNavigate = { onNavigate(General) },\n"
+        "                isSelected = currentRoute is General,\n"
+        "            )\n\n"
+        "            PreferenceCategory(\n"
+        '                label = "Styles",\n'
+        '                description = "Glass, gradient, blur and one-tap looks",\n'
+        "                iconResource = R.drawable.ic_palette,\n"
+        "                onNavigate = { onNavigate(app.lawnchair.ui.preferences.navigation.RumbStyles) },\n"
+        "                isSelected = currentRoute is app.lawnchair.ui.preferences.navigation.RumbStyles,\n"
+        "            )\n",
+    ),
+    # Searches from Rumb should not be attributed to Lawnchair's partner segment.
+    (
+        "lawnchair/src/app/lawnchair/qsb/providers/Startpage.kt",
+        'website = "https://startpage.com/?segment=startpage.lawnchair",',
+        'website = "https://startpage.com/",',
+    ),
+    (
+        "lawnchair/src/app/lawnchair/qsb/providers/StartpageEU.kt",
+        'website = "https://eu.startpage.com/?segment=startpage.lawnchair",',
+        'website = "https://eu.startpage.com/",',
+    ),
+]
 
 # Rumb's out-of-the-box look and behaviour, set through Lawnchair's config defaults.
 RUMB_DEFAULTS = {
@@ -137,6 +204,12 @@ def apply_defaults(root: pathlib.Path) -> None:
     config.write_text(text, encoding="utf-8")
 
 
+def apply_code_patches(root: pathlib.Path) -> None:
+    for relative, anchor, replacement in CODE_PATCHES:
+        replace_once(root / relative, anchor, replacement)
+    print(f"Applied {len(CODE_PATCHES)} code patches")
+
+
 def copy_overlay(root: pathlib.Path) -> None:
     overlay = pathlib.Path(__file__).resolve().parent / "overlay"
     for source in overlay.rglob("*"):
@@ -156,6 +229,7 @@ def main() -> None:
     brand_gradle(root, sys.argv[2], sys.argv[3])
     brand_strings(root)
     apply_defaults(root)
+    apply_code_patches(root)
     copy_overlay(root)
     print(f"Branded {root} as {APP_NAME} ({APPLICATION_ID}), version {sys.argv[2]} ({sys.argv[3]})")
 
