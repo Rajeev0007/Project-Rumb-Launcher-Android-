@@ -25,7 +25,7 @@ class SystemActions(context: Context) {
     fun openBluetoothSettings() = start(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
     fun openDisplaySettings() = start(Intent(Settings.ACTION_DISPLAY_SETTINGS))
     fun openSoundSettings() = start(Intent(Settings.ACTION_SOUND_SETTINGS))
-    fun openBatterySettings() = start(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS), Intent(Settings.ACTION_BATTERY_SETTINGS))
+    fun openBatterySettings() = start(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS), Intent(Settings.ACTION_SETTINGS))
     fun openWallpaperPicker() = start(Intent(Intent.ACTION_SET_WALLPAPER))
     fun openHomeSettings() = start(Intent(Settings.ACTION_HOME_SETTINGS))
 
