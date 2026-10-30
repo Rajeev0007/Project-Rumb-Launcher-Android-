@@ -155,6 +155,52 @@ class MainActivity : ComponentActivity(), LauncherActivityController {
         )
     }
 
+    override fun requestWidgetProvider(providerFlattened: String) {
+        if (pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) cancelPendingWidget()
+        val provider = ComponentName.unflattenFromString(providerFlattened)
+        if (provider == null || provider.flattenToString() != providerFlattened) {
+            onError?.invoke("The selected widget provider is invalid")
+            return
+        }
+        val providerInfo = runCatching {
+            appWidgetManager.installedProviders.firstOrNull { it.provider == provider }
+        }.getOrNull()
+        if (providerInfo == null) {
+            onError?.invoke("The selected widget provider is no longer installed")
+            return
+        }
+        val appWidgetId = runCatching { appWidgetHost.allocateAppWidgetId() }.getOrElse {
+            onError?.invoke("A widget ID could not be allocated: ${it.message}")
+            return
+        }
+        pendingWidgetId = appWidgetId
+        pendingWidgetProvider = providerFlattened
+        pendingWidgetProfile = providerInfo.profile
+        val bound = runCatching {
+            appWidgetManager.bindAppWidgetIdIfAllowed(
+                appWidgetId,
+                providerInfo.profile,
+                provider,
+                Bundle.EMPTY,
+            )
+        }.getOrDefault(false)
+        if (bound) {
+            val info = validatedInfo(appWidgetId, providerFlattened)
+            if (info == null) cancelPendingWidget("The selected widget provider could not be validated")
+            else beginWidgetConfiguration(info)
+        } else {
+            pendingWidgetStage = WidgetStage.BIND
+            launchWidgetActivity(
+                bindWidget,
+                Intent(AppWidgetManager.ACTION_APPWIDGET_BIND)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER_PROFILE, providerInfo.profile),
+                "The system widget binding screen is unavailable",
+            )
+        }
+    }
+
     override fun createWidgetView(appWidgetId: Int, expectedProvider: String): AppWidgetHostView? {
         val info = validatedInfo(appWidgetId, expectedProvider) ?: return null
         return runCatching {
@@ -192,6 +238,7 @@ class MainActivity : ComponentActivity(), LauncherActivityController {
         }
         appWidgetManager.getAppWidgetInfo(pendingWidgetId)?.let {
             pendingWidgetProvider = it.provider.flattenToString()
+            pendingWidgetProfile = it.profile
             beginWidgetConfiguration(it)
             return
         }
@@ -290,7 +337,9 @@ class MainActivity : ComponentActivity(), LauncherActivityController {
     private fun validatedInfo(appWidgetId: Int, expectedProvider: String?): AppWidgetProviderInfo? {
         if (appWidgetId < 0 || expectedProvider.isNullOrBlank()) return null
         val expected = ComponentName.unflattenFromString(expectedProvider) ?: return null
-        return appWidgetManager.getAppWidgetInfo(appWidgetId)?.takeIf { it.provider == expected }
+        return appWidgetManager.getAppWidgetInfo(appWidgetId)?.takeIf { info ->
+            info.provider == expected && (pendingWidgetProfile == null || info.profile == pendingWidgetProfile)
+        }
     }
 
     private fun launchWidgetActivity(

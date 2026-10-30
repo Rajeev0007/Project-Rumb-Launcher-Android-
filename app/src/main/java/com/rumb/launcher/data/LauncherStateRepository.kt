@@ -70,8 +70,21 @@ class LauncherStateRepository(context: Context) {
         if (json != null) {
             runCatching { decode(JSONObject(json), allowWidgets = true) }.getOrNull()?.let { return normalize(it) }
         }
-        return migrateLegacy()
+        val hasLegacyState = listOf(
+            KEY_LEGACY_FAVORITES,
+            KEY_LEGACY_COLUMNS,
+            KEY_LEGACY_ICON_SIZE,
+            KEY_LEGACY_THEME,
+        ).any(preferences::contains)
+        return if (hasLegacyState) migrateLegacy() else freshV3Defaults()
     }
+
+    private fun freshV3Defaults(): LauncherSettings = normalize(
+        LauncherSettings(
+            clockStyle = ClockStyle.HIDDEN,
+            swipeDownAction = GestureAction.OPEN_QUICK_PANEL,
+        ),
+    ).also(::persist)
 
     private fun migrateLegacy(): LauncherSettings {
         val favorites = preferences.getStringSet(KEY_LEGACY_FAVORITES, emptySet()).orEmpty()

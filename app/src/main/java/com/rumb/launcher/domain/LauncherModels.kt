@@ -33,11 +33,11 @@ data class AppShortcut(
 enum class ThemePreference { SYSTEM, LIGHT, DARK, AMOLED }
 enum class VisualStyle { AURA_GLASS, SOFT_PANEL, CRYSTAL_DOCK, PURE_MINIMAL }
 enum class IconShape { SYSTEM, CIRCLE, ROUNDED, SQUIRCLE }
-enum class ClockStyle { LARGE, COMPACT, MINIMAL }
+enum class ClockStyle { HIDDEN, LARGE, COMPACT, MINIMAL }
 enum class ClockAlignment { LEFT, CENTER, RIGHT }
 enum class ClockTimeFormat { SYSTEM, TWELVE_HOUR, TWENTY_FOUR_HOUR }
 enum class ClockFont { SANS, SERIF, MONOSPACE }
-enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SETTINGS, LOCK_LAYOUT }
+enum class GestureAction { NONE, OPEN_DRAWER, OPEN_QUICK_PANEL, OPEN_SETTINGS, LOCK_LAYOUT }
 enum class HomeItemType { APP, FOLDER, WIDGET }
 
 data class HomeItem(
@@ -80,7 +80,7 @@ data class LauncherSettings(
     val homeItems: List<HomeItem> = emptyList(),
     val dockApps: List<AppId> = emptyList(),
 ) {
-    companion object { const val CURRENT_SCHEMA = 4 }
+    companion object { const val CURRENT_SCHEMA = 5 }
 }
 
 data class CatalogState(

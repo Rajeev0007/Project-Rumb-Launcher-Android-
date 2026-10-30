@@ -33,6 +33,7 @@ import com.rumb.launcher.feature.appactions.FolderAppEntry
 import com.rumb.launcher.feature.appactions.FolderDialog
 import com.rumb.launcher.feature.drawer.AppDrawerScreen
 import com.rumb.launcher.feature.home.HomeScreen
+import com.rumb.launcher.feature.quickpanel.QuickPanelScreen
 import com.rumb.launcher.feature.settings.SettingsScreen
 import com.rumb.launcher.platform.LauncherActivityController
 import com.rumb.launcher.ui.theme.RumbLauncherTheme
@@ -42,6 +43,7 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
     val context = LocalContext.current
     val model: LauncherViewModel = viewModel(factory = LauncherViewModel.factory(context.applicationContext))
     val state by model.uiState.collectAsStateWithLifecycle()
+    val widgetState by model.widgetCatalog.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
     var editMode by rememberSaveable { mutableStateOf(false) }
 
@@ -115,13 +117,35 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                         },
                     )
                     Destination.DRAWER -> AppDrawerScreen(
-                        state,
-                        model.iconLoader,
+                        state = state,
+                        iconLoader = model.iconLoader,
+                        widgetState = widgetState,
+                        widgetPreviewLoader = model.widgetPreviewLoader,
                         onBack = { model.navigate(Destination.HOME) },
                         onSearch = model::search,
-                        onRefresh = model.catalog::refresh,
+                        onRefreshApps = model.catalog::refresh,
+                        onRefreshWidgets = model.widgetCatalog::refresh,
                         onLaunch = model::launch,
                         onLongPress = model::selectApp,
+                        onRequestWidget = {
+                            if (state.settings.layoutLocked) model.showMessage("Unlock the home layout before adding a widget")
+                            else controller.requestWidget()
+                        },
+                        onRequestWidgetProvider = { provider ->
+                            if (state.settings.layoutLocked) model.showMessage("Unlock the home layout before adding a widget")
+                            else controller.requestWidgetProvider(provider)
+                        },
+                    )
+                    Destination.QUICK_PANEL -> QuickPanelScreen(
+                        style = state.settings.visualStyle,
+                        onBack = { model.navigate(Destination.HOME) },
+                        onInternet = model.systemActions::openInternetSettings,
+                        onBluetooth = model.systemActions::openBluetoothSettings,
+                        onDisplay = model.systemActions::openDisplaySettings,
+                        onSound = model.systemActions::openSoundSettings,
+                        onBattery = model.systemActions::openBatterySettings,
+                        onWallpaper = model.systemActions::openWallpaperPicker,
+                        onHomeSettings = model.systemActions::openHomeSettings,
                     )
                     Destination.SETTINGS -> SettingsScreen(
                         settings = state.settings,

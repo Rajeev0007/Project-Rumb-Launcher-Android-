@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -72,6 +74,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.rumb.launcher.LauncherUiState
+import com.rumb.launcher.domain.ClockStyle
 import com.rumb.launcher.domain.GestureAction
 import com.rumb.launcher.domain.HomeItem
 import com.rumb.launcher.domain.HomeItemType
@@ -128,6 +131,9 @@ fun HomeScreen(
     var lastTapPosition by remember { mutableStateOf(Offset.Unspecified) }
     val previewScale by animateFloatAsState(if (editMode) .91f else 1f, label = "home preview scale")
     val previewLift = with(density) { if (editMode) (-52).dp.toPx() else 0f }
+    LaunchedEffect(settings.clockStyle, settings.layoutLocked) {
+        if (settings.clockStyle == ClockStyle.HIDDEN && !settings.layoutLocked) interactiveBounds.remove("clock")
+    }
 
     Box(
         Modifier.fillMaxSize().pointerInput(
@@ -224,24 +230,30 @@ fun HomeScreen(
             },
         ) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 24.dp, end = 20.dp, top = 26.dp, bottom = 8.dp)
-                        .onGloballyPositioned { interactiveBounds["clock"] = it.boundsInRoot() },
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    LauncherClock(
-                        style = settings.clockStyle,
-                        alignment = settings.clockAlignment,
-                        timeFormat = settings.clockTimeFormat,
-                        font = settings.clockFont,
-                        size = settings.clockSize,
-                        showDate = settings.showDate,
-                        showSeconds = settings.showSeconds,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (settings.layoutLocked) {
-                        Surface(shape = CircleShape, color = tokens.surface, border = androidx.compose.foundation.BorderStroke(1.dp, tokens.border)) {
-                            Icon(Icons.Default.Lock, contentDescription = "Home layout locked", tint = tokens.foreground, modifier = Modifier.padding(10.dp).size(18.dp))
+                if (settings.clockStyle != ClockStyle.HIDDEN || settings.layoutLocked) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 20.dp, top = 20.dp, bottom = 4.dp)
+                            .onGloballyPositioned { interactiveBounds["clock"] = it.boundsInRoot() },
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        if (settings.clockStyle != ClockStyle.HIDDEN) {
+                            LauncherClock(
+                                style = settings.clockStyle,
+                                alignment = settings.clockAlignment,
+                                timeFormat = settings.clockTimeFormat,
+                                font = settings.clockFont,
+                                size = settings.clockSize,
+                                showDate = settings.showDate,
+                                showSeconds = settings.showSeconds,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            Box(Modifier.weight(1f))
+                        }
+                        if (settings.layoutLocked) {
+                            Surface(shape = CircleShape, color = tokens.surface, border = androidx.compose.foundation.BorderStroke(1.dp, tokens.border)) {
+                                Icon(Icons.Default.Lock, contentDescription = "Home layout locked", tint = tokens.foreground, modifier = Modifier.padding(10.dp).size(18.dp))
+                            }
                         }
                     }
                 }
@@ -324,25 +336,6 @@ private fun HomePage(
         val cellWidth = maxWidth / settings.columns
         val cellHeight = maxHeight / settings.rows
         val density = LocalDensity.current
-        if (items.isEmpty()) {
-            VisualSurface(
-                settings.visualStyle,
-                Modifier.align(Alignment.Center).padding(28.dp),
-                shape = RoundedCornerShape(24.dp),
-                elevation = 8.dp,
-            ) {
-                Column(Modifier.padding(horizontal = 24.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Make this space yours", color = visualTokens(settings.visualStyle).foreground, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "Long-press empty space to choose a look, wallpaper, widgets, and layout.",
-                        color = visualTokens(settings.visualStyle).mutedForeground,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-            }
-        }
         items.sortedBy { if (it.type == HomeItemType.WIDGET) 0 else 1 }.forEach { item ->
             key(item.id) {
                 DisposableEffect(item.id) { onDispose { onRemoveBounds(item.id) } }
@@ -490,53 +483,50 @@ private fun Dock(
 ) {
     val style = state.settings.visualStyle
     val tokens = visualTokens(style)
-    VisualDockSurface(
-        style = style,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)
-            .onGloballyPositioned { onBounds(it.boundsInRoot()) },
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
+    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+        VisualDockSurface(
+            style = style,
+            modifier = Modifier.wrapContentWidth().onGloballyPositioned { onBounds(it.boundsInRoot()) },
         ) {
-            apps.forEach { app ->
-                AppTile(
-                    app,
-                    iconLoader,
-                    45.dp,
-                    state.settings.iconShape,
-                    state.settings.themedIcons,
-                    true,
-                    Modifier.weight(1f),
-                    { onLaunch(app) },
-                    null,
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).semantics { contentDescription = "Open all apps" },
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Row(
+                Modifier.wrapContentWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onOpenDrawer, modifier = Modifier.size(52.dp)) {
-                    Box(
-                        Modifier.size(46.dp).background(
-                            androidx.compose.ui.graphics.Brush.linearGradient(listOf(tokens.accent, tokens.accentSecondary)),
-                            RoundedCornerShape(if (style == VisualStyle.PURE_MINIMAL) 14.dp else 18.dp),
-                        ),
-                        Alignment.Center,
-                    ) { Icon(Icons.Default.Apps, contentDescription = "All apps", tint = Color.White, modifier = Modifier.size(24.dp)) }
+                apps.forEach { app ->
+                    AppTile(
+                        app = app,
+                        iconLoader = iconLoader,
+                        iconSize = 36.dp,
+                        iconShape = state.settings.iconShape,
+                        themed = state.settings.themedIcons,
+                        homeStyle = true,
+                        modifier = Modifier.width(46.dp),
+                        onClick = { onLaunch(app) },
+                        onLongClick = null,
+                    )
                 }
-                Text("Apps", color = tokens.foreground, style = MaterialTheme.typography.labelSmall)
+                Column(
+                    modifier = Modifier.width(46.dp).clip(RoundedCornerShape(16.dp))
+                        .semantics { contentDescription = "Open all apps" },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    IconButton(onClick = onOpenDrawer, modifier = Modifier.size(46.dp)) {
+                        Box(
+                            Modifier.size(40.dp).background(
+                                androidx.compose.ui.graphics.Brush.linearGradient(listOf(tokens.accent, tokens.accentSecondary)),
+                                RoundedCornerShape(if (style == VisualStyle.PURE_MINIMAL) 13.dp else 16.dp),
+                            ),
+                            Alignment.Center,
+                        ) {
+                            Icon(Icons.Default.Apps, contentDescription = "All apps", tint = Color.White, modifier = Modifier.size(22.dp))
+                        }
+                    }
+                    Text("Apps", color = tokens.foreground, style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
-    if (apps.isEmpty()) Text(
-        "Long-press empty space to personalize",
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-        color = tokens.mutedForeground.copy(alpha = .78f),
-        style = MaterialTheme.typography.labelSmall,
-        textAlign = TextAlign.Center,
-    )
 }
 
 @Composable
