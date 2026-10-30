@@ -16,36 +16,26 @@ import sys
 APP_NAME = "Rumb Launcher"
 APPLICATION_ID = "com.rumb.launcher.next"
 
-# Strings that name the app in prompts and hints, in every language. The copyright
-# header and the sponsored-search revenue disclosure keep saying Lawnchair because
-# they describe Lawnchair itself; licence credits live on the About screen.
-RENAMED_STRINGS = [
-    "managed_by_lawnchair",
-    "accessibility_service_description",
-    "debug_restart_launcher",
-    "set_default_launcher_tip",
-    "smartspace_widget_toggle_description",
-    "restore_nova_subgrid_warning",
-    "dt2s_admin_hint",
-    "dt2s_a11y_hint",
-    "recents_a11y_hint",
-    "quickswitch_ignored_warning",
-    "lawnchair_bug_report",
-]
-
-# Provider names shown in pickers (English only, not translatable upstream).
-PROVIDER_NAMES = {
-    "smartspace_mode_lawnchair": "Rumb",
-    "hotseat_mode_lawnchair": "Rumb",
-}
+# Every user-visible string that says "Lawnchair" is renamed, in every language.
+# Short provider names (a string whose whole text is "Lawnchair") become "Rumb".
+# Kept: the sponsored-search disclosure, because it states a real revenue deal with
+# Lawnchair, and licence credits, which stay on the About screen's licences entry.
+KEEP_STRINGS = {"search_provider_sponsored_description"}
 
 # Rumb's out-of-the-box look and behaviour, set through Lawnchair's config defaults.
 RUMB_DEFAULTS = {
+    # Look
     "config_default_icon_shape": "squircle",
     "config_default_accent_color": "custom|#ff5b48c9",
     "config_default_live_information_enabled": "false",
     "config_default_live_information_show_announcements": "false",
     "config_default_enable_fuzzy_search": "true",
+    # Customisation within reach: long-press an app to change its icon, and the
+    # Home long-press menu gets edit, lock, and system-settings shortcuts.
+    "config_default_enable_icon_selection": "true",
+    "config_default_edit_home_screen_on_popup": "true",
+    "config_default_lock_home_screen_on_popup": "true",
+    "config_default_show_system_settings_entry_on_popup": "true",
 }
 
 
@@ -82,48 +72,58 @@ def brand_gradle(root: pathlib.Path, version_name: str, version_code: str) -> No
         f'resValue("string", "derived_app_name", "{APP_NAME} (Debug)")',
     )
     replace_line(gradle, r"^final def versionDisplayName = .*$", f'final def versionDisplayName = "{version_name}"')
-    replace_line(gradle, r"^final def majorVersion = .*$", 'final def majorVersion = "15"')
+    replace_line(gradle, r"^final def majorVersion = .*$", 'final def majorVersion = "16"')
     if not version_code.isdigit() or int(version_code) > 2_100_000_000:
         fail(f"invalid version code {version_code}")
     replace_line(gradle, r"^(\s*)versionCode [0-9_]+\s*$", rf"\g<1>versionCode {version_code}")
     replace_line(
         gradle,
-        r'^(\s*)outputFileName = "Lawnchair\..*$',
-        r'\1outputFileName = "Rumb-Launcher-${channel}-${variant.buildType.name}.apk"',
+        r'^(\s*)output\.outputFileName\.set\("Lawnchair\..*$',
+        r'\1output.outputFileName.set("Rumb-Launcher-${channel}-${variant.buildType}.apk")',
     )
 
 
-def rename_in(text: str, name: str, replacement: str, required: bool) -> str:
-    pattern = re.compile(rf'(<string name="{name}"[^>]*>)(.*?)(</string>)', re.DOTALL)
-    match = pattern.search(text)
-    if match is None:
-        if required:
-            fail(f"string {name} not found")
-        return text
-    body = match.group(2).replace("Lawnchair", replacement)
-    return text[: match.start()] + match.group(1) + body + match.group(3) + text[match.end():]
+STRING_ELEMENT = re.compile(r'(<string\b([^>]*)>)(.*?)(</string>)', re.DOTALL)
+NAME_ATTR = re.compile(r'name="([^"]+)"')
+
+
+def rebrand_text(text: str) -> tuple[str, int]:
+    changes = 0
+
+    def replace(match: re.Match) -> str:
+        nonlocal changes
+        name = NAME_ATTR.search(match.group(2) or "")
+        body = match.group(3)
+        if "Lawnchair" not in body or body.lstrip().startswith("@") or (name and name.group(1) in KEEP_STRINGS):
+            return match.group(0)
+        changes += 1
+        new_body = "Rumb" if body.strip() == "Lawnchair" else body.replace("Lawnchair", APP_NAME)
+        return match.group(1) + new_body + match.group(4)
+
+    return STRING_ELEMENT.sub(replace, text), changes
 
 
 def brand_strings(root: pathlib.Path) -> None:
-    res = root / "lawnchair" / "res"
-    english = res / "values" / "strings.xml"
-    translated = 0
-    for strings in sorted(res.glob("values*/strings.xml")):
-        text = strings.read_text(encoding="utf-8")
-        original = text
-        is_english = strings == english
-        for name in RENAMED_STRINGS:
-            text = rename_in(text, name, APP_NAME, required=is_english)
-        if is_english:
-            for name, label in PROVIDER_NAMES.items():
-                pattern = re.compile(rf'(<string name="{name}"[^>]*>)Lawnchair(</string>)')
-                text, count = pattern.subn(rf"\g<1>{label}\g<2>", text)
-                if count != 1:
-                    fail(f"provider string {name} not found")
-        if text != original:
-            strings.write_text(text, encoding="utf-8")
-            translated += 0 if is_english else 1
-    print(f"Renamed app strings in English and {translated} translations")
+    files = 0
+    strings = 0
+    for res in (root / "lawnchair" / "res", root / "res", root / "quickstep" / "res"):
+        if not res.is_dir():
+            continue
+        for path in sorted(res.glob("values*/strings.xml")):
+            text = path.read_text(encoding="utf-8")
+            if "Lawnchair" not in text:
+                continue
+            updated, count = rebrand_text(text)
+            if count:
+                path.write_text(updated, encoding="utf-8")
+                files += 1
+                strings += count
+    english = (root / "lawnchair" / "res" / "values" / "strings.xml").read_text(encoding="utf-8")
+    leftover = [m.group(1) for m in re.finditer(r'<string name="([^"]+)"[^>]*>[^<]*Lawnchair', english)
+                if m.group(1) not in KEEP_STRINGS]
+    if leftover:
+        fail(f"English strings still name Lawnchair: {leftover}")
+    print(f"Rebranded {strings} strings in {files} resource files")
 
 
 def apply_defaults(root: pathlib.Path) -> None:

@@ -1,16 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Rumb icon for Android 13+ themed icons: single colour R and spark. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:pathData="M54,25A29,29 0,1 1,33.5 74.5"
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="4"
-        android:strokeLineCap="round" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M37,32h20c12,0 20,7.1 20,17.5c0,7.2 -3.8,12.7 -10.4,15.5L79,80H64.2L53.7,67H49v13H37zM49,43v13.5h8.1c5.1,0 7.8,-2.3 7.8,-6.8S62.2,43 57.1,43zM76,24A5,5 0,1 0,76 34A5,5 0,1 0,76 24" />
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.84" android:scaleY="0.84">
+        <path
+            android:pathData="M38,78V30h18a14,14 0,0 1,0 28H46"
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="10"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M57,60L71,78"
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="10"
+            android:strokeLineCap="round" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M74,26a6,6 0,1 1,0 12a6,6 0,1 1,0 -12z" />
+    </group>
 </vector>
