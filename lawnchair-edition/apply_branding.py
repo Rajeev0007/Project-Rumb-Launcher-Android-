@@ -84,6 +84,34 @@ CODE_PATCHES = [
         "            background.setColor(finalColor);\n"
         "        }\n",
     ),
+    # Bug fix: the dock panel filled the whole dock area, down under the gesture bar, so it
+    # looked glued to the screen edge. Float it around the icon row with an 8dp margin
+    # (your own Dock inset settings still add to this), and redo it once the dock knows its
+    # padding, which is only set after the constructor runs.
+    (
+        "src/com/android/launcher3/Hotseat.java",
+        "        InsetDrawable bg = new InsetDrawable(background,\n"
+        "                insetHorizontalLeft, insetVerticalTop, insetHorizontalRight, insetVerticalBottom);\n",
+        "        int rumbMargin = Math.round(8 * getResources().getDisplayMetrics().density);\n"
+        "        int rumbSide = Math.round(12 * getResources().getDisplayMetrics().density);\n"
+        "        boolean rumbFloat = !mActivity.getDeviceProfile().isVerticalBarLayout();\n"
+        "        if (rumbFloat) {\n"
+        "            insetHorizontalLeft += rumbSide;\n"
+        "            insetHorizontalRight += rumbSide;\n"
+        "            insetVerticalTop += Math.max(0, getPaddingTop() - rumbMargin);\n"
+        "            insetVerticalBottom += Math.max(0, getPaddingBottom() - rumbMargin);\n"
+        "        }\n"
+        "        InsetDrawable bg = new InsetDrawable(background,\n"
+        "                insetHorizontalLeft, insetVerticalTop, insetHorizontalRight, insetVerticalBottom);\n",
+    ),
+    (
+        "src/com/android/launcher3/Hotseat.java",
+        "        setPadding(padding.left, padding.top, padding.right, padding.bottom);\n"
+        "        setLayoutParams(lp);\n",
+        "        setPadding(padding.left, padding.top, padding.right, padding.bottom);\n"
+        "        setUpBackground();\n"
+        "        setLayoutParams(lp);\n",
+    ),
     # Styles screen: route, navigation, and a dashboard entry right after General.
     (
         "lawnchair/src/app/lawnchair/ui/preferences/navigation/PreferenceRoutes.kt",

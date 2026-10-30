@@ -129,9 +129,40 @@ def swipe(x1: int, y1: int, x2: int, y2: int, ms: int = 350) -> None:
     shell(f"input swipe {x1} {y1} {x2} {y2} {ms}")
 
 
-def open_drawer() -> None:
-    swipe(W // 2, int(H * 0.82), W // 2, int(H * 0.25), 300)
-    time.sleep(2.5)
+def drawer_is_open(root: ET.Element | None) -> bool:
+    return len(drawer_apps(root)) > 6 or find(root, "Search apps") is not None
+
+
+def open_drawer(name: str = "drawer") -> bool:
+    """Swipe up like a finger would; check the drawer really opened; fall back to the menu."""
+    attempts = [
+        (int(H * 0.62), int(H * 0.18), 450),   # from the middle of Home
+        (int(H * 0.70), int(H * 0.15), 700),   # slower and longer
+        (int(H * 0.80), int(H * 0.20), 900),   # from the dock
+    ]
+    for index, (y1, y2, ms) in enumerate(attempts, 1):
+        # Grab a frame halfway through the gesture to see what the drawer is doing.
+        mid = subprocess.Popen(["adb", "shell", f"input swipe {W // 2} {y1} {W // 2} {y2} {ms}"])
+        time.sleep(ms / 2000)
+        if index == 1:
+            screenshot(f"{name}-mid-swipe")
+        mid.wait(timeout=30)
+        time.sleep(3)
+        if drawer_is_open(dump()):
+            if index > 1:
+                log(f"  ! {name}: swipe up opened the drawer only on attempt {index}")
+                problems.append(f"{name}: swipe up needed {index} attempts")
+            return True
+        log(f"  ! {name}: swipe attempt {index} ({y1}->{y2}, {ms}ms) did not open the drawer")
+        go_home(2)
+    problems.append(f"{name}: swipe up never opened the drawer")
+    swipe(W // 2, int(H * 0.45), W // 2, int(H * 0.45), 1200)
+    time.sleep(2)
+    if tap_text("Apps list", wait=3) and drawer_is_open(dump()):
+        log(f"  {name}: opened the drawer from the Home menu instead")
+        return True
+    log(f"  ! {name}: the drawer did not open at all")
+    return False
 
 
 def drawer_apps(root: ET.Element | None) -> list[tuple[str, tuple[int, int, int, int]]]:
@@ -205,14 +236,14 @@ dismiss_dialogs()
 go_home()
 
 step("01-home")
-open_drawer()
-root = step("02-drawer", 2)
+open_drawer("02-drawer")
+root = step("02-drawer", 1)
 check_drawer("02-drawer", root)
 swipe(W // 2, int(H * 0.75), W // 2, int(H * 0.35), 400)
 step("03-drawer-scrolled", 2)
 go_home()
 
-open_drawer()
+open_drawer("04-search")
 if tap_text("Search apps", wait=2) or tap_text("Search", exact=False, wait=2):
     shell("input text set")
     step("04-drawer-search", 2)
@@ -249,10 +280,11 @@ for preset in PRESETS:
             break
         first = find(root, "Pixel") or find(root, "One-tap looks")
         y = (bounds(first)[1] + bounds(first)[3]) // 2 if first is not None else int(H * 0.35)
-        swipe(int(W * 0.85), y, int(W * 0.25), y, 400)
+        swipe(int(W * 0.80), y, int(W * 0.40), y, 600)
         time.sleep(1.5)
         root = dump()
     if node is None:
+        screenshot(f"p-{slug}-0-not-found")
         log(f"  ! preset {preset} not found on the Styles screen")
         problems.append(f"styles: preset {preset} not found")
         continue
@@ -262,8 +294,8 @@ for preset in PRESETS:
     dismiss_dialogs()
     go_home(5)
     step(f"p-{slug}-1-home", 2)
-    open_drawer()
-    root = step(f"p-{slug}-2-drawer", 2)
+    open_drawer(f"p-{slug}")
+    root = step(f"p-{slug}-2-drawer", 1)
     check_drawer(f"p-{slug}-drawer", root, expect_list=(preset == "Minimal List"))
     go_home()
 
@@ -282,6 +314,7 @@ if tap_text("Widgets", wait=4):
         time.sleep(1.5)
     step("20-widget-picker", 2)
 else:
+    screenshot("20-widget-picker-not-found")
     log("  ! Widgets entry not found in the Home long-press menu")
 go_home()
 
