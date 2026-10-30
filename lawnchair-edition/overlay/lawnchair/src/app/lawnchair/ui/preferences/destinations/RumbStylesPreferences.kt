@@ -63,8 +63,10 @@ import app.lawnchair.ui.preferences.components.layout.PreferenceGroup
 import app.lawnchair.ui.preferences.components.layout.PreferenceLayout
 import app.lawnchair.util.FileAccessManager
 import app.lawnchair.util.FileAccessState
+import androidx.datastore.preferences.core.edit
 import com.android.launcher3.R
 import com.patrykmichalik.opto.core.setBlocking
+import kotlinx.coroutines.runBlocking
 
 /** A one-tap look: icon and folder shape, dock, labels, folders, drawer, and accent together. */
 private data class RumbStyle(
@@ -83,6 +85,13 @@ private data class RumbStyle(
     val accent: String,
     val wantsBlur: Boolean,
     val preview: List<Color>,
+    /** Monochrome icons on tinted tiles, on Home and in the drawer. */
+    val themedIcons: Boolean = false,
+    /** "system", "light" or "dark". */
+    val theme: String = "system",
+    /** One app per row in the drawer, with a small icon beside the name. */
+    val listDrawer: Boolean = false,
+    val homeIconSize: Float = 1f,
 )
 
 private val RumbStylePresets = listOf(
@@ -93,6 +102,33 @@ private val RumbStylePresets = listOf(
         dockRadius = 24f, dockGradient = false, dockSearch = "lawnchair", labels = true,
         folderOpacity = 1f, drawerOpacity = 1f, accent = "system_accent", wantsBlur = false,
         preview = listOf(Color(0xFF1B6EF3), Color(0xFF7BB3FF)),
+    ),
+    RumbStyle(
+        name = "Nova Dark",
+        description = "Dark theme, monochrome icons on dark circles, search bar under the dock",
+        iconShape = "circle", dockBackground = false, dockColor = "default", dockAlpha = 0,
+        dockRadius = 24f, dockGradient = false, dockSearch = "lawnchair", labels = true,
+        folderOpacity = 0.9f, drawerOpacity = 1f, accent = "system_accent", wantsBlur = false,
+        preview = listOf(Color(0xFF0E1116), Color(0xFF2A3140)),
+        themedIcons = true, theme = "dark",
+    ),
+    RumbStyle(
+        name = "iOS 27",
+        description = "Large rounded icons, white glass dock, iOS blue accent",
+        iconShape = "cupertino", dockBackground = true, dockColor = "custom|#ffffffff", dockAlpha = 30,
+        dockRadius = 34f, dockGradient = false, dockSearch = "disabled", labels = true,
+        folderOpacity = 0.7f, drawerOpacity = 0.9f, accent = "custom|#ff0a84ff", wantsBlur = true,
+        preview = listOf(Color(0xFF5AC8FA), Color(0xFFAF52DE)),
+        homeIconSize = 1.1f,
+    ),
+    RumbStyle(
+        name = "Minimal List",
+        description = "Black and quiet: app names in a list, monochrome icons, no dock chrome",
+        iconShape = "circle", dockBackground = false, dockColor = "default", dockAlpha = 0,
+        dockRadius = 20f, dockGradient = false, dockSearch = "disabled", labels = true,
+        folderOpacity = 1f, drawerOpacity = 1f, accent = "custom|#ff8e9099", wantsBlur = false,
+        preview = listOf(Color(0xFF000000), Color(0xFF1C1C1E)),
+        themedIcons = true, theme = "dark", listDrawer = true,
     ),
     RumbStyle(
         name = "Glass",
@@ -119,7 +155,7 @@ private val RumbStylePresets = listOf(
         preview = listOf(Color(0xFF7B5CFF), Color(0xFF1FB6FF)),
     ),
     RumbStyle(
-        name = "Minimal",
+        name = "Clean",
         description = "No labels, no dock chrome, nothing in the way",
         iconShape = "roundedSquare", dockBackground = false, dockColor = "default", dockAlpha = 0,
         dockRadius = 20f, dockGradient = false, dockSearch = "disabled", labels = false,
@@ -157,8 +193,33 @@ private fun applyStyle(
     } else if (!style.wantsBlur) {
         prefs.enableWallpaperBlur.set(false)
     }
+    prefs.themedIcons.set(style.themedIcons)
+    prefs.drawerThemedIcons.set(style.themedIcons)
+    prefs.launcherTheme.set(style.theme)
+    prefs2.homeIconSizeFactor.setBlocking(style.homeIconSize)
+    setListDrawer(prefs, prefs2, style.listDrawer)
     // Accent last: changing it restarts the launcher to rebuild colours.
     prefs2.accentColor.setBlocking(ColorOption.fromString(style.accent))
+}
+
+/**
+ * Turns the list drawer on or off. On: one column, short rows, no suggestion row, one-line
+ * names. Off: back to the device's default columns and row height. Nothing changes when the
+ * drawer is already in the requested mode, so your own grid settings are kept.
+ */
+private fun setListDrawer(prefs: PreferenceManager, prefs2: PreferenceManager2, enabled: Boolean) {
+    if (prefs.rumbListDrawer.get() == enabled) return
+    val columnsKey = prefs2.drawerColumns.key
+    runBlocking {
+        prefs2.preferencesDataStore.edit { stored ->
+            if (enabled) stored[columnsKey] = 1 else stored.remove(columnsKey)
+        }
+    }
+    prefs2.drawerCellHeightFactor.setBlocking(if (enabled) 0.62f else 1f)
+    prefs2.showSuggestedAppsInDrawer.setBlocking(!enabled)
+    if (enabled) prefs2.twoLineAllApps.setBlocking(false)
+    prefs.rumbListDrawer.set(enabled)
+    prefs2.drawerColumns.onSet(if (enabled) 1 else -1)
 }
 
 @Composable
@@ -181,7 +242,7 @@ fun RumbStylesPreferences(
     ) {
         PreferenceGroup(
             heading = "One-tap looks",
-            description = "Applies icon shape, dock, folders, drawer and accent together. Rumb restarts once to apply colours.",
+            description = "Applies icon shape and style, dock, folders, drawer, theme and accent together. Rumb restarts once to apply colours.",
         ) {
             Row(
                 modifier = Modifier
@@ -273,6 +334,16 @@ fun RumbStylesPreferences(
             }
         }
 
+        val listDrawer = prefs.rumbListDrawer.getAdapter()
+        PreferenceGroup(heading = "App drawer") {
+            SwitchPreference(
+                checked = listDrawer.state.value,
+                onCheckedChange = { setListDrawer(prefs, prefs2, it) },
+                label = "List drawer",
+                description = "One app per row with a small icon, like a minimal text launcher. Use the A–Z scrollbar to jump.",
+            )
+        }
+
         PreferenceGroup(
             heading = "Icon changer",
             description = "Long-press any app on Home or in the drawer, tap Edit, then pick a new icon from any installed icon pack or rename the app. Shapes and icon packs are in General.",
@@ -316,12 +387,27 @@ private fun StyleCard(style: RumbStyle, onClick: () -> Unit) {
                 .clip(RoundedCornerShape(18.dp))
                 .background(Brush.linearGradient(style.preview)),
         ) {
-            Row(
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                repeat(4) {
-                    Box(Modifier.size(22.dp).clip(iconShape).background(Color.White.copy(alpha = 0.92f)))
+            if (style.listDrawer) {
+                Column(
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    listOf(46, 64, 38, 56).forEach { width ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.55f)))
+                            Spacer(Modifier.width(6.dp))
+                            Box(Modifier.width(width.dp).height(6.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.85f)))
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    repeat(4) {
+                        PreviewIcon(style, iconShape, 22)
+                    }
                 }
             }
             val dockModifier = Modifier
@@ -342,7 +428,7 @@ private fun StyleCard(style: RumbStyle, onClick: () -> Unit) {
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(4) {
-                        Box(Modifier.size(18.dp).clip(iconShape).background(Color.White.copy(alpha = 0.85f)))
+                        PreviewIcon(style, iconShape, 18)
                     }
                 }
             }
@@ -356,5 +442,20 @@ private fun StyleCard(style: RumbStyle, onClick: () -> Unit) {
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/** A white tile, or for themed styles a dark tile with a light glyph. */
+@Composable
+private fun PreviewIcon(style: RumbStyle, shape: Shape, sizeDp: Int) {
+    if (style.themedIcons) {
+        Box(
+            modifier = Modifier.size(sizeDp.dp).clip(shape).background(Color(0xFF2B2F38)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.size((sizeDp * 0.42f).dp).clip(CircleShape).background(Color(0xFFC9D2E3)))
+        }
+    } else {
+        Box(Modifier.size(sizeDp.dp).clip(shape).background(Color.White.copy(alpha = 0.9f)))
     }
 }

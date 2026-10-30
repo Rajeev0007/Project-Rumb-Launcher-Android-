@@ -5,3 +5,5 @@ local.properties
 .idea/
 build/
 app/build/
+
+__pycache__/
