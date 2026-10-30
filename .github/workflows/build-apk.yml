@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      RUMB_KEYSTORE_PATH: ${{ runner.temp }}/rumb-release.jks
+      RUMB_KEYSTORE_PATH: /tmp/rumb-release-${{ github.run_id }}-${{ github.run_attempt }}.jks
       RUMB_KEYSTORE_PASSWORD: rumb-${{ github.run_id }}-${{ github.run_attempt }}
       RUMB_KEY_ALIAS: rumb-release
       RUMB_KEY_PASSWORD: rumb-${{ github.run_id }}-${{ github.run_attempt }}
