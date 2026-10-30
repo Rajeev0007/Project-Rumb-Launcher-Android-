@@ -1,0 +1,134 @@
+name: Build Rumb Launcher (Lawnchair edition)
+
+# Builds Rumb Launcher from Lawnchair's source at a pinned commit, with Rumb branding.
+# Lawnchair is GPL-3.0; each release links the exact upstream source and branding used.
+
+on:
+  push:
+    branches:
+      - main
+      - feature/v4-lawnchair-edition
+    paths:
+      - "lawnchair-edition/**"
+      - ".github/workflows/build-rumb-lawnchair.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "lawnchair-edition/**"
+      - ".github/workflows/build-rumb-lawnchair.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rumb-lawnchair-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Lawnchair 15 Beta 3 (tag v15.0.0-beta3.0), the latest upstream release.
+  LAWNCHAIR_REF: 505dbc40e6154c05158b5d0271c45f6a885a411b
+  RUMB_VERSION_NAME: "Rumb 4.0.0 (Lawnchair 15 Beta 3)"
+  RELEASE_TAG: v4.0.0
+  RELEASE_TITLE: "Rumb Launcher 4.0.0 (Lawnchair edition)"
+
+jobs:
+  build:
+    name: Build signed APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      RUMB_KEYSTORE_PASSWORD: ${{ secrets.RUMB_KEYSTORE_PASSWORD || format('rumb-{0}-{1}', github.run_id, github.run_attempt) }}
+      RUMB_KEY_ALIAS: ${{ secrets.RUMB_KEY_ALIAS || 'rumb-release' }}
+      RUMB_KEY_PASSWORD: ${{ secrets.RUMB_KEY_PASSWORD || format('rumb-{0}-{1}', github.run_id, github.run_attempt) }}
+
+    steps:
+      - name: Check out Rumb branding
+        uses: actions/checkout@v7
+        with:
+          path: rumb
+
+      - name: Check out Lawnchair source
+        uses: actions/checkout@v7
+        with:
+          repository: LawnchairLauncher/lawnchair
+          ref: ${{ env.LAWNCHAIR_REF }}
+          submodules: recursive
+          path: lawnchair
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Apply Rumb branding
+        run: python3 rumb/lawnchair-edition/apply_branding.py lawnchair "$RUMB_VERSION_NAME"
+
+      - name: Prepare release signing key
+        working-directory: lawnchair
+        env:
+          RUMB_KEYSTORE_BASE64: ${{ secrets.RUMB_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$RUMB_KEYSTORE_BASE64" ]; then
+            echo "$RUMB_KEYSTORE_BASE64" | base64 --decode > rumb-release.jks
+            echo "Using the permanent release key from repository secrets."
+          else
+            echo "::warning::RUMB_KEYSTORE_BASE64 is not set. This APK uses a one-off key and cannot update an existing install."
+            keytool -genkeypair -noprompt -keystore rumb-release.jks -storetype PKCS12 \
+              -storepass "$RUMB_KEYSTORE_PASSWORD" -alias "$RUMB_KEY_ALIAS" -keypass "$RUMB_KEY_PASSWORD" \
+              -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Rumb Launcher, OU=Release, O=Rumb, C=US"
+          fi
+          {
+            echo "storeFile=rumb-release.jks"
+            echo "storePassword=$RUMB_KEYSTORE_PASSWORD"
+            echo "keyAlias=$RUMB_KEY_ALIAS"
+            echo "keyPassword=$RUMB_KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: Build release APK
+        working-directory: lawnchair
+        run: ./gradlew assembleLawnWithQuickstepGithubRelease --no-daemon --stacktrace
+
+      - name: Verify APK
+        working-directory: lawnchair
+        run: |
+          APK="$(find build/outputs/apk -name 'Rumb-Launcher-*release*.apk' | head -1)"
+          test -n "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt2 | sort -V | tail -1)"
+          "$APKSIGNER" verify --print-certs "$APK"
+          "$AAPT" dump badging "$APK" | grep -E "^package:|^application-label:"
+          "$AAPT" dump badging "$APK" | grep -q "name='com.rumb.launcher.next'"
+          mkdir -p ../dist
+          cp "$APK" "../dist/Rumb-Launcher-${RELEASE_TAG}.apk"
+          (cd ../dist && sha256sum "Rumb-Launcher-${RELEASE_TAG}.apk" > "Rumb-Launcher-${RELEASE_TAG}.apk.sha256")
+          ls -la ../dist
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: Rumb-Launcher-lawnchair-edition
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
+        if: github.event_name == 'push'
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Rumb Launcher built from Lawnchair (GPL-3.0) with Rumb branding. Android 8.0 or newer.
+
+          Source: Lawnchair https://github.com/LawnchairLauncher/lawnchair/tree/${LAWNCHAIR_REF} with the Rumb branding in https://github.com/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}/lawnchair-edition"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" ./* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" ./* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "$RELEASE_TITLE" --notes "$NOTES" --latest
+          fi
