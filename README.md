@@ -1,6 +1,22 @@
-# Rumb Launcher Next 3.3.0
+# Rumb Launcher Next 3.4.0
 
 Rumb Launcher Next is a private, offline Android home-screen replacement built with native Kotlin and Jetpack Compose. V3 uses the supplied screenshots only as structural reference for a new AMOLED-first library, wallpaper-first Home, and safe quick-control launcher. Its surfaces, geometry, color treatment, and artwork are original rather than copies of another launcher or vendor interface. Android 8.0 (API 26) and newer are supported.
+
+## What's new in 3.4: Rumb Expressive
+
+A new design language, `ui/design/Expressive.kt`, takes cues from current phone software:
+
+- **One UI-style large titles.** Every Settings page opens with a tall title that fades into a compact top bar as you scroll.
+- **Material 3 Expressive controls:**
+  - Connected button groups whose selected segment turns fully round and whose pressed segment briefly widens.
+  - A thick-track slider with a bar thumb.
+  - Switches with a check mark.
+  - Springy press feedback.
+- **OriginOS-style quick tiles and filled icons.** The Settings home has a live Home preview card with real icons, plus four quick tiles: Lock layout, Dots, Search bar, and Labels. A tile fills and tightens its corners when turned on. Rows use vivid filled squircle icons.
+- **Visual pickers.** Theme, clock style, time format, alignment, and font are inline button groups. Icon shape is a row of shape previews. Long lists such as gestures and icon packs open a sheet of large options.
+- **Quick Panel:** large clock, wide pill tiles for Internet and Bluetooth, and filled-icon action tiles, all following the app theme.
+- **Customise tray:** theme surface, filled-icon action tiles, and a full-width Done button.
+- **App library:** a sliding pill switcher for Apps and Widgets.
 
 ## What's new in 3.3
 
@@ -56,7 +72,7 @@ V3 installs as **Rumb Launcher Next** with application ID `com.rumb.launcher.nex
 
 Android refuses to update an installed package when the incoming APK has the same application ID but a different signing certificate. That commonly appears as an app-not-installed or package-conflict error. Giving V3 a new application ID lets it install beside an older `com.rumb.launcher` build, including an old differently signed debug APK. Android treats the two IDs as separate apps, so select **Rumb Launcher Next** again in the system Home chooser. Private app data does not transfer automatically between package IDs; use Rumb's explicit JSON export/import where the older build supports it.
 
-The Play Protect screenshot concerns the **old v2.0.1 debug APK**, with its old package identity and debug signing context. The current deliverable is **V3.3.0** (`versionCode 10`) under `com.rumb.launcher.next`. A locally built debug APK is still debug-signed; the hardened release is the unminified release variant signed only when all four release-signing variables are supplied. Package identity and release signing distinguish the current release from the old debug artifact, but no project can promise how Play Protect or an OEM scanner will classify a sideloaded APK.
+The Play Protect screenshot concerns the **old v2.0.1 debug APK**, with its old package identity and debug signing context. The current deliverable is **V3.4.0** (`versionCode 11`) under `com.rumb.launcher.next`. A locally built debug APK is still debug-signed; the hardened release is the unminified release variant signed only when all four release-signing variables are supplied. Package identity and release signing distinguish the current release from the old debug artifact, but no project can promise how Play Protect or an OEM scanner will classify a sideloaded APK.
 
 ## V3 Home
 

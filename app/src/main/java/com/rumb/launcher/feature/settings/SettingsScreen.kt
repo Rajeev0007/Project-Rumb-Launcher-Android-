@@ -1,6 +1,5 @@
 package com.rumb.launcher.feature.settings
 
-import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -20,17 +19,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Accessibility
@@ -70,13 +65,10 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,12 +79,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
 import com.rumb.launcher.BuildConfig
 import com.rumb.launcher.LauncherUiState
 import com.rumb.launcher.LauncherViewModel
@@ -112,6 +101,14 @@ import com.rumb.launcher.ui.components.AppTile
 import com.rumb.launcher.ui.components.LauncherClock
 import com.rumb.launcher.ui.components.displayName
 import com.rumb.launcher.ui.components.visualTokens
+import com.rumb.launcher.ui.design.LargeTitleScaffold
+import com.rumb.launcher.ui.design.PreviewPicker
+import com.rumb.launcher.ui.design.SystemBarsFor
+import com.rumb.launcher.ui.design.ToggleTile
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.Role
 
 private enum class SettingsPage(val title: String, val parent: SettingsPage?) {
     ROOT("Settings", null),
@@ -124,6 +121,9 @@ private enum class SettingsPage(val title: String, val parent: SettingsPage?) {
     ACCESS("Notifications & access", ROOT),
     BACKUP("Backup & restore", ROOT),
     ABOUT("About", ROOT),
+    ;
+
+    val depth: Int get() = generateSequence(parent) { it.parent }.count()
 }
 
 @Composable
@@ -137,84 +137,40 @@ fun SettingsScreen(
 ) {
     var page by rememberSaveable { mutableStateOf(SettingsPage.ROOT) }
     BackHandler(page != SettingsPage.ROOT) { page = page.parent ?: SettingsPage.ROOT }
-    SystemBarAppearance()
+    SystemBarsFor(MaterialTheme.colorScheme.surface)
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-        AnimatedContent(
-            targetState = page,
-            transitionSpec = {
-                val forward = targetState.ordinal > initialState.ordinal && targetState.parent != null
-                val enter = slideInHorizontally(tween(280)) { if (forward) it / 3 else -it / 3 } + fadeIn(tween(220))
-                val exit = slideOutHorizontally(tween(220)) { if (forward) -it / 5 else it / 5 } + fadeOut(tween(160))
-                enter togetherWith exit
-            },
-            label = "settings page",
-        ) { current ->
-            SettingsPageScaffold(
-                title = current.title,
-                onBack = { if (current == SettingsPage.ROOT) onBack() else page = current.parent ?: SettingsPage.ROOT },
-            ) {
-                val settings = state.settings
-                when (current) {
-                    SettingsPage.ROOT -> rootPage(state) { page = it }
-                    SettingsPage.APPEARANCE -> appearancePage(state, model)
-                    SettingsPage.HOME -> homePage(settings, model, onAddWidget)
-                    SettingsPage.LIBRARY -> libraryPage(state, model) { page = SettingsPage.HIDDEN_APPS }
-                    SettingsPage.HIDDEN_APPS -> hiddenAppsPage(state, model)
-                    SettingsPage.CLOCK -> clockPage(settings, model)
-                    SettingsPage.GESTURES -> gesturesPage(state, model)
-                    SettingsPage.ACCESS -> accessPage(state, model)
-                    SettingsPage.BACKUP -> backupPage(onExport, onImport)
-                    SettingsPage.ABOUT -> aboutPage(state, model)
-                }
-            }
-        }
-    }
-}
-
-/** Settings has an opaque surface, so status bar icons follow its brightness while it is shown. */
-@Composable
-private fun SystemBarAppearance() {
-    val view = LocalView.current
-    val lightSurface = MaterialTheme.colorScheme.surface.luminance() > .5f
-    DisposableEffect(view, lightSurface) {
-        val window = (view.context as? Activity)?.window
-        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
-        controller?.isAppearanceLightStatusBars = lightSurface
-        controller?.isAppearanceLightNavigationBars = lightSurface
-        onDispose {
-            controller?.isAppearanceLightStatusBars = false
-            controller?.isAppearanceLightNavigationBars = false
-        }
-    }
-}
-
-@Composable
-private fun SettingsPageScaffold(title: String, onBack: () -> Unit, content: LazyListScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    AnimatedContent(
+        targetState = page,
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+        transitionSpec = {
+            val forward = targetState.depth > initialState.depth
+            val enter = slideInHorizontally(spring(dampingRatio = .9f, stiffness = 420f)) { if (forward) it / 3 else -it / 3 } +
+                fadeIn(tween(200))
+            val exit = slideOutHorizontally(spring(dampingRatio = .9f, stiffness = 420f)) { if (forward) -it / 5 else it / 5 } +
+                fadeOut(tween(140))
+            enter togetherWith exit
+        },
+        label = "settings page",
+    ) { current ->
+        LargeTitleScaffold(
+            title = current.title,
+            subtitle = if (current == SettingsPage.ROOT) "Rumb Launcher Next · ${BuildConfig.VERSION_NAME}" else null,
+            onBack = { if (current == SettingsPage.ROOT) onBack() else page = current.parent ?: SettingsPage.ROOT },
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+            val settings = state.settings
+            when (current) {
+                SettingsPage.ROOT -> rootPage(state, model) { page = it }
+                SettingsPage.APPEARANCE -> appearancePage(state, model)
+                SettingsPage.HOME -> homePage(settings, model, onAddWidget)
+                SettingsPage.LIBRARY -> libraryPage(state, model) { page = SettingsPage.HIDDEN_APPS }
+                SettingsPage.HIDDEN_APPS -> hiddenAppsPage(state, model)
+                SettingsPage.CLOCK -> clockPage(settings, model)
+                SettingsPage.GESTURES -> gesturesPage(state, model)
+                SettingsPage.ACCESS -> accessPage(state, model)
+                SettingsPage.BACKUP -> backupPage(onExport, onImport)
+                SettingsPage.ABOUT -> aboutPage(state, model)
             }
         }
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 28.dp, end = 24.dp, top = 4.dp, bottom = 12.dp),
-        )
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
-            content = {
-                content()
-                item(key = "nav-spacer") { Spacer(Modifier.navigationBarsPadding()) }
-            },
-        )
     }
 }
 
@@ -227,41 +183,114 @@ private fun LazyListScope.group(key: String, title: String? = null, content: @Co
 // ---------------------------------------------------------------------------------------------
 // Root
 
-private fun LazyListScope.rootPage(state: LauncherUiState, open: (SettingsPage) -> Unit) {
+private fun LazyListScope.rootPage(state: LauncherUiState, model: LauncherViewModel, open: (SettingsPage) -> Unit) {
     val settings = state.settings
+    item(key = "hero") { HomeHero(state, model) { open(SettingsPage.APPEARANCE) } }
+    item(key = "quick-tiles") {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ToggleTile("Lock layout", Icons.Default.Lock, settings.layoutLocked, model::updateLayoutLocked, Modifier.weight(1f))
+                ToggleTile(
+                    "Dots",
+                    Icons.Default.Notifications,
+                    settings.notificationDots,
+                    model::updateNotificationDots,
+                    Modifier.weight(1f),
+                    status = when {
+                        !settings.notificationDots -> "Off"
+                        state.notificationAccess -> "On"
+                        else -> "Needs access"
+                    },
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ToggleTile("Search bar", Icons.Default.Search, settings.homeSearchBar, model::updateHomeSearchBar, Modifier.weight(1f))
+                ToggleTile("Labels", Icons.Default.Title, settings.showHomeLabels, model::updateShowHomeLabels, Modifier.weight(1f))
+            }
+        }
+    }
     if (!state.isDefaultLauncher) {
         item(key = "default-banner") {
             SettingsBanner(
                 title = "Make Rumb your Home app",
-                body = "Pressing Home still opens another launcher. Choose Rumb Launcher Next as the default to use it everywhere.",
+                body = "Pressing Home still opens another launcher. Set Rumb Launcher Next as the default to use it everywhere.",
                 action = "Set as default",
-                onAction = { open(SettingsPage.ABOUT) },
+                onAction = model.systemActions::openHomeSettings,
             )
         }
     }
     group("root-look") {
-        SettingsNavRow("Appearance", "${settings.visualStyle.displayName()} · ${settings.theme.label()} theme", Icons.Default.Palette, SettingsTint.Purple) { open(SettingsPage.APPEARANCE) }
+        SettingsNavRow("Appearance", "${settings.visualStyle.displayName()} · ${settings.theme.label()} · ${settings.iconShape.label()}", Icons.Default.Palette, SettingsTint.Purple) { open(SettingsPage.APPEARANCE) }
         SettingsDivider()
-        SettingsNavRow("Home screen", homeSummary(settings), Icons.Default.Home, SettingsTint.Blue) { open(SettingsPage.HOME) }
+        SettingsNavRow("Home screen", homeSummary(settings), Icons.Default.GridView, SettingsTint.Blue) { open(SettingsPage.HOME) }
         SettingsDivider()
         SettingsNavRow("App library", librarySummary(settings), Icons.Default.Apps, SettingsTint.Teal) { open(SettingsPage.LIBRARY) }
         SettingsDivider()
         SettingsNavRow("Clock", clockSummary(settings), Icons.Default.Schedule, SettingsTint.Orange) { open(SettingsPage.CLOCK) }
     }
     group("root-behaviour") {
-        SettingsNavRow("Gestures", "Swipe up: ${settings.swipeUpAction.label()} · Double tap: ${settings.doubleTapAction.label()}", Icons.Default.Gesture, SettingsTint.Pink) { open(SettingsPage.GESTURES) }
+        SettingsNavRow("Gestures", "Swipe up: ${settings.swipeUpAction.label()}", Icons.Default.Gesture, SettingsTint.Pink) { open(SettingsPage.GESTURES) }
         SettingsDivider()
-        SettingsNavRow(
-            "Notifications & access",
-            if (settings.notificationDots) "Notification dots on" else "Notification dots off",
-            Icons.Default.Notifications,
-            SettingsTint.Red,
-        ) { open(SettingsPage.ACCESS) }
+        SettingsNavRow("Notifications & access", if (settings.notificationDots) "Dots on" else "Dots off", Icons.Default.Shield, SettingsTint.Red) { open(SettingsPage.ACCESS) }
     }
     group("root-system") {
         SettingsNavRow("Backup & restore", "Export or import your layout", Icons.Default.Backup, SettingsTint.Green) { open(SettingsPage.BACKUP) }
         SettingsDivider()
         SettingsNavRow("About", "Version ${BuildConfig.VERSION_NAME}", Icons.Default.Info, SettingsTint.Slate) { open(SettingsPage.ABOUT) }
+    }
+}
+
+/** A wallpaper-like card with real app icons rendered exactly as Home will show them. */
+@Composable
+private fun HomeHero(state: LauncherUiState, model: LauncherViewModel, onCustomise: () -> Unit) {
+    val settings = state.settings
+    val tokens = visualTokens(settings.visualStyle)
+    val sample = remember(state.apps, settings.dockApps) {
+        val docked = settings.dockApps.mapNotNull(state.appsById::get)
+        (docked + state.apps).distinctBy { it.id }.take(4)
+    }
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp).clip(RoundedCornerShape(30.dp))
+            .background(Brush.linearGradient(listOf(tokens.accent, tokens.accentSecondary, Color(0xFF12A594))))
+            .padding(16.dp),
+    ) {
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.Black.copy(alpha = .18f))
+                .padding(top = 14.dp, bottom = 10.dp, start = 6.dp, end = 6.dp),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    sample.forEach { app ->
+                        AppTile(
+                            app = app,
+                            iconLoader = model.iconLoader,
+                            iconSize = 46.dp,
+                            appearance = settings.iconAppearance,
+                            showLabel = false,
+                            badged = app.badgeKey in state.badges,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Box(Modifier.padding(top = 6.dp).fillMaxWidth(.7f).height(28.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = .22f)))
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 14.dp, start = 4.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(settings.visualStyle.displayName(), color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "${settings.columns} × ${settings.rows} · ${if (settings.pageCount == 1) "1 page" else "${settings.pageCount} pages"} · ${settings.iconShape.label()}",
+                    color = Color.White.copy(alpha = .85f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Box(
+                Modifier.clip(CircleShape).background(Color.White).clickable(role = Role.Button, onClick = onCustomise)
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+            ) {
+                Text("Customise", color = Color(0xFF2F2580), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
@@ -284,11 +313,11 @@ private fun clockSummary(settings: LauncherSettings): String =
 
 private fun LazyListScope.appearancePage(state: LauncherUiState, model: LauncherViewModel) {
     val settings = state.settings
-    item(key = "preview") { IconPreview(state, model) }
+    item(key = "preview") { HomeHero(state, model) {} }
     item(key = "styles") {
         SettingsGroup("Style") {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(VisualStyle.entries, key = { it.name }) { style ->
@@ -297,27 +326,18 @@ private fun LazyListScope.appearancePage(state: LauncherUiState, model: Launcher
             }
         }
     }
-    group("colors", "Colours") {
-        SettingsChoiceRow(
-            title = "Theme",
+    group("colors", "Theme") {
+        SettingsSegmentedRow(
+            title = "Mode",
             options = ThemePreference.entries,
             selected = settings.theme,
-            label = { it.label() },
+            label = { it.shortLabel() },
             onSelect = model::updateTheme,
-            icon = Icons.Default.DarkMode,
-            tint = SettingsTint.Purple,
-            description = {
-                when (it) {
-                    ThemePreference.SYSTEM -> "Follow the device setting"
-                    ThemePreference.AMOLED -> "Pure black surfaces for OLED screens"
-                    else -> null
-                }
-            },
         )
-        SettingsDivider()
+        SettingsDivider(inset = false)
         SettingsSwitchRow(
-            title = "Material You colours",
-            summary = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "Match menus to your wallpaper" else "Needs Android 12 or newer",
+            title = "Material You",
+            summary = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "Match colours to your wallpaper" else "Needs Android 12 or newer",
             checked = settings.dynamicColor,
             onCheckedChange = model::updateDynamicColor,
             icon = Icons.Default.ColorLens,
@@ -326,35 +346,37 @@ private fun LazyListScope.appearancePage(state: LauncherUiState, model: Launcher
         )
     }
     group("icons", "Icons") {
-        SettingsChoiceRow(
-            title = "Icon shape",
-            options = IconShape.entries,
-            selected = settings.iconShape,
-            label = { it.label() },
-            onSelect = model::updateIconShape,
-            icon = Icons.Default.Category,
-            tint = SettingsTint.Blue,
-        )
-        SettingsDivider()
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+            PreviewPicker(
+                options = IconShape.entries,
+                selected = settings.iconShape,
+                label = { it.shortLabel() },
+                onSelect = model::updateIconShape,
+            ) { shape, _ ->
+                Box(
+                    Modifier.size(36.dp).clip(shape.previewShape())
+                        .background(Brush.linearGradient(listOf(Color(0xFFFFB547), Color(0xFFFF6B6B)))),
+                )
+            }
+        }
+        SettingsDivider(inset = false)
         SettingsSliderRow(
             title = "Icon size",
             value = settings.iconSize,
             range = 42..72,
             step = 2,
             onValueCommitted = model::updateIconSize,
-            icon = Icons.Default.PhotoSizeSelectLarge,
-            tint = SettingsTint.Blue,
             valueLabel = { "$it dp" },
         )
-        SettingsDivider()
+        SettingsDivider(inset = false)
         IconPackRow(settings, state.iconPacks, model::updateIconPack)
         SettingsDivider()
         SettingsSwitchRow(
             title = "Themed icons",
             summary = when {
                 Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU -> "Needs Android 13 or newer"
-                settings.iconPack != null -> "Not available while an icon pack is in use"
-                else -> "Single-colour icons for apps that provide them"
+                settings.iconPack != null -> "Not available with an icon pack"
+                else -> "Single-colour icons where apps provide them"
             },
             checked = settings.themedIcons,
             onCheckedChange = model::updateThemedIcons,
@@ -386,32 +408,6 @@ private fun IconPackRow(settings: LauncherSettings, packs: List<IconPack>, onSel
         tint = SettingsTint.Blue,
         description = { if (it == null) "Each app's own icon" else null },
     )
-}
-
-/** Four real app icons rendered with the current shape, size, pack, and theme on a wallpaper-like card. */
-@Composable
-private fun IconPreview(state: LauncherUiState, model: LauncherViewModel) {
-    val tokens = visualTokens(state.settings.visualStyle)
-    val sample = remember(state.apps) { state.apps.take(4) }
-    if (sample.isEmpty()) return
-    Box(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(28.dp))
-            .background(Brush.linearGradient(listOf(tokens.accent.copy(alpha = .85f), tokens.accentSecondary.copy(alpha = .75f), Color(0xFF14121F))))
-            .padding(vertical = 20.dp, horizontal = 12.dp),
-    ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            sample.forEach { app ->
-                AppTile(
-                    app = app,
-                    iconLoader = model.iconLoader,
-                    iconSize = state.settings.iconSize.dp,
-                    appearance = state.settings.iconAppearance,
-                    showLabel = state.settings.showHomeLabels,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -546,32 +542,28 @@ private fun LazyListScope.hiddenAppsPage(state: LauncherUiState, model: Launcher
 private fun LazyListScope.clockPage(settings: LauncherSettings, model: LauncherViewModel) {
     if (settings.clockStyle != ClockStyle.HIDDEN) item(key = "clock-preview") { ClockPreview(settings) }
     group("clock-style", "Style") {
-        SettingsChoiceRow(
-            "Clock",
-            ClockStyle.entries,
-            settings.clockStyle,
-            { it.label() },
-            model::updateClockStyle,
-            icon = Icons.Default.AccessTime,
-            tint = SettingsTint.Orange,
-            description = {
-                when (it) {
-                    ClockStyle.HIDDEN -> "Wallpaper only; uses no timer"
-                    ClockStyle.LARGE -> "Big time with the date"
-                    ClockStyle.COMPACT -> "Smaller time with the date"
-                    ClockStyle.MINIMAL -> "Thin time, no date"
-                }
+        SettingsSegmentedRow(
+            title = "Clock",
+            options = ClockStyle.entries,
+            selected = settings.clockStyle,
+            label = { it.label() },
+            onSelect = model::updateClockStyle,
+            summary = when (settings.clockStyle) {
+                ClockStyle.HIDDEN -> "Wallpaper only, no timer running"
+                ClockStyle.LARGE -> "Big time with the date"
+                ClockStyle.COMPACT -> "Smaller time with the date"
+                ClockStyle.MINIMAL -> "Thin time, no date"
             },
         )
         if (settings.clockStyle != ClockStyle.HIDDEN) {
-            SettingsDivider()
-            SettingsChoiceRow("Time format", ClockTimeFormat.entries, settings.clockTimeFormat, { it.label() }, model::updateClockTimeFormat, icon = Icons.Default.Timer, tint = SettingsTint.Orange)
-            SettingsDivider()
-            SettingsChoiceRow("Alignment", ClockAlignment.entries, settings.clockAlignment, { it.label() }, model::updateClockAlignment, icon = Icons.Default.FormatAlignCenter, tint = SettingsTint.Orange)
-            SettingsDivider()
-            SettingsChoiceRow("Font", ClockFont.entries, settings.clockFont, { it.label() }, model::updateClockFont, icon = Icons.Default.TextFields, tint = SettingsTint.Orange)
-            SettingsDivider()
-            SettingsSliderRow("Size", settings.clockSize, 28..72, 2, model::updateClockSize, icon = Icons.Default.FormatSize, tint = SettingsTint.Orange, valueLabel = { "$it sp" })
+            SettingsDivider(inset = false)
+            SettingsSegmentedRow("Time format", ClockTimeFormat.entries, settings.clockTimeFormat, { it.shortLabel() }, model::updateClockTimeFormat)
+            SettingsDivider(inset = false)
+            SettingsSegmentedRow("Alignment", ClockAlignment.entries, settings.clockAlignment, { it.label() }, model::updateClockAlignment)
+            SettingsDivider(inset = false)
+            SettingsSegmentedRow("Font", ClockFont.entries, settings.clockFont, { it.shortLabel() }, model::updateClockFont)
+            SettingsDivider(inset = false)
+            SettingsSliderRow("Size", settings.clockSize, 28..72, 2, model::updateClockSize, valueLabel = { "$it sp" })
         }
     }
     if (settings.clockStyle != ClockStyle.HIDDEN) {
@@ -586,7 +578,7 @@ private fun LazyListScope.clockPage(settings: LauncherSettings, model: LauncherV
                 enabled = settings.clockStyle != ClockStyle.MINIMAL,
             )
             SettingsDivider()
-            SettingsSwitchRow("Show seconds", settings.showSeconds, model::updateShowSeconds, "Updates every second and uses a little more battery", Icons.Default.Timer, SettingsTint.Orange)
+            SettingsSwitchRow("Show seconds", settings.showSeconds, model::updateShowSeconds, "Updates every second; uses a little more battery", Icons.Default.Timer, SettingsTint.Orange)
         }
     }
 }
@@ -799,6 +791,39 @@ private fun ThemePreference.label() = when (this) {
     ThemePreference.LIGHT -> "Light"
     ThemePreference.DARK -> "Dark"
     ThemePreference.AMOLED -> "AMOLED black"
+}
+
+private fun ThemePreference.shortLabel() = when (this) {
+    ThemePreference.SYSTEM -> "Auto"
+    ThemePreference.LIGHT -> "Light"
+    ThemePreference.DARK -> "Dark"
+    ThemePreference.AMOLED -> "Black"
+}
+
+private fun IconShape.shortLabel() = when (this) {
+    IconShape.SYSTEM -> "System"
+    IconShape.CIRCLE -> "Circle"
+    IconShape.ROUNDED -> "Rounded"
+    IconShape.SQUIRCLE -> "Squircle"
+}
+
+private fun IconShape.previewShape(): androidx.compose.ui.graphics.Shape = when (this) {
+    IconShape.SYSTEM -> RoundedCornerShape(10.dp)
+    IconShape.CIRCLE -> CircleShape
+    IconShape.ROUNDED -> RoundedCornerShape(24)
+    IconShape.SQUIRCLE -> RoundedCornerShape(34)
+}
+
+private fun ClockFont.shortLabel() = when (this) {
+    ClockFont.SANS -> "Sans"
+    ClockFont.SERIF -> "Serif"
+    ClockFont.MONOSPACE -> "Mono"
+}
+
+private fun ClockTimeFormat.shortLabel() = when (this) {
+    ClockTimeFormat.SYSTEM -> "System"
+    ClockTimeFormat.TWELVE_HOUR -> "12-hour"
+    ClockTimeFormat.TWENTY_FOUR_HOUR -> "24-hour"
 }
 
 private fun IconShape.label() = when (this) {
