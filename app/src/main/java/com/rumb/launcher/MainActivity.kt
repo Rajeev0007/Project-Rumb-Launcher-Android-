@@ -92,9 +92,7 @@ class MainActivity : ComponentActivity(), LauncherActivityController {
         pendingWidgetId = savedInstanceState?.getInt(STATE_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
             ?: AppWidgetManager.INVALID_APPWIDGET_ID
         pendingWidgetProvider = savedInstanceState?.getString(STATE_WIDGET_PROVIDER)
-        pendingWidgetProfile = savedInstanceState?.getInt(STATE_WIDGET_PROFILE, Int.MIN_VALUE)
-            ?.takeIf { it != Int.MIN_VALUE }
-            ?.let(UserHandle::of)
+        pendingWidgetProfile = savedInstanceState?.userHandle(STATE_WIDGET_PROFILE)
         pendingWidgetStage = savedInstanceState?.getString(STATE_WIDGET_STAGE)?.let {
             runCatching { WidgetStage.valueOf(it) }.getOrNull()
         }
@@ -129,7 +127,7 @@ class MainActivity : ComponentActivity(), LauncherActivityController {
         super.onSaveInstanceState(outState)
         outState.putInt(STATE_WIDGET_ID, pendingWidgetId)
         pendingWidgetProvider?.let { outState.putString(STATE_WIDGET_PROVIDER, it) }
-        pendingWidgetProfile?.let { outState.putInt(STATE_WIDGET_PROFILE, it.identifier) }
+        pendingWidgetProfile?.let { outState.putParcelable(STATE_WIDGET_PROFILE, it) }
         pendingWidgetStage?.let { outState.putString(STATE_WIDGET_STAGE, it.name) }
     }
 
@@ -336,6 +334,13 @@ class MainActivity : ComponentActivity(), LauncherActivityController {
         pendingWidgetProfile = null
         pendingWidgetStage = null
         pendingReadyWidget = null
+    }
+
+    @Suppress("DEPRECATION")
+    private fun Bundle.userHandle(name: String): UserHandle? = if (Build.VERSION.SDK_INT >= 33) {
+        getParcelable(name, UserHandle::class.java)
+    } else {
+        getParcelable(name)
     }
 
     @Suppress("DEPRECATION")
