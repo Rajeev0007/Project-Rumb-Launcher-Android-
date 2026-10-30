@@ -49,8 +49,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$GITHUB_REF_NAME" == "feature/rumb-launcher-v2" ]]; then
-            TAG="v2.0.0"
-            TITLE="Rumb Launcher v2.0.0"
+            TAG="v2.0.1"
+            TITLE="Rumb Launcher v2.0.1"
           else
             TAG="v1.0.0"
             TITLE="Rumb Launcher v1.0.0"
