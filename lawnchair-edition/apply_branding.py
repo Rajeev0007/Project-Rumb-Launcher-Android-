@@ -200,6 +200,33 @@ CODE_PATCHES = [
         'if (input.text.toString() == "/lawnchairdebug") {',
         'if (input.text.toString() == "/rumbdebug") {',
     ),
+    # Rumb widgets, listed under Rumb Launcher in the widget picker.
+    (
+        "lawnchair/AndroidManifest.xml",
+        '                android:resource="@xml/smartspace_appwidget_info" />\n'
+        "        </receiver>\n",
+        '                android:resource="@xml/smartspace_appwidget_info" />\n'
+        "        </receiver>\n"
+        + "".join(
+            f'\n        <receiver\n'
+            f'            android:name="app.lawnchair.rumb.{cls}"\n'
+            f'            android:exported="false"\n'
+            f'            android:label="@string/rumb_widget_{name}">\n'
+            f'            <intent-filter>\n'
+            f'                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n'
+            f'            </intent-filter>\n'
+            f'            <meta-data\n'
+            f'                android:name="android.appwidget.provider"\n'
+            f'                android:resource="@xml/rumb_widget_{name}_info" />\n'
+            f'        </receiver>\n'
+            for cls, name in (
+                ("RumbDayClockWidget", "day_clock"),
+                ("RumbGlassClockWidget", "glass_clock"),
+                ("RumbControlCenterWidget", "control_center"),
+                ("RumbScreenTimeWidget", "screen_time"),
+            )
+        ),
+    ),
     # Searches from Rumb should not be attributed to Lawnchair's partner segment.
     (
         "lawnchair/src/app/lawnchair/qsb/providers/Startpage.kt",

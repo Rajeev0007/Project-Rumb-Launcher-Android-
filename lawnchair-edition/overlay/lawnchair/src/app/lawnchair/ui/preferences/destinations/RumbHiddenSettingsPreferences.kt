@@ -12,11 +12,20 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material3.Icon as MaterialIcon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -31,7 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.lawnchair.ui.preferences.LocalIsExpandedScreen
-import app.lawnchair.ui.preferences.components.controls.ClickablePreference
+import app.lawnchair.ui.preferences.components.layout.PreferenceTemplate
 import app.lawnchair.ui.preferences.components.layout.PreferenceLayoutLazyColumn
 import app.lawnchair.ui.preferences.components.layout.preferenceGroupItems
 import kotlinx.coroutines.Dispatchers
@@ -153,6 +162,58 @@ private fun Context.open(screen: HiddenScreen) {
     }
 }
 
+/** Pins a shortcut to this screen on the Home screen, with the Settings app's icon. */
+private fun Context.pinToHome(screen: HiddenScreen) {
+    val shortcutManager = getSystemService(ShortcutManager::class.java)
+    if (shortcutManager == null || !shortcutManager.isRequestPinShortcutSupported) {
+        Toast.makeText(this, "Adding shortcuts is not supported here", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val target = screen.intent.component?.flattenToShortString() ?: screen.intent.action ?: screen.label
+    val info = ShortcutInfo.Builder(this, "rumb_hidden_" + Integer.toHexString(target.hashCode()))
+        .setShortLabel(screen.label.take(24))
+        .setLongLabel(screen.label.take(48))
+        .setIcon(settingsIcon(screen))
+        .setIntent(Intent(screen.intent))
+        .build()
+    try {
+        shortcutManager.requestPinShortcut(info, null)
+    } catch (_: Exception) {
+        Toast.makeText(this, "Could not add ${screen.label} to Home", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun Context.settingsIcon(screen: HiddenScreen): Icon {
+    val pkg = screen.intent.component?.packageName
+        ?: packageManager.resolve(screen.intent)?.packageName
+        ?: SETTINGS
+    return try {
+        val drawable = packageManager.getApplicationIcon(pkg)
+        val size = (48 * resources.displayMetrics.density).toInt().coerceAtLeast(96)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(Canvas(bitmap))
+        Icon.createWithBitmap(bitmap)
+    } catch (_: Exception) {
+        Icon.createWithResource(this, com.android.launcher3.R.drawable.rumb_ic_hidden_settings)
+    }
+}
+
+@Composable
+private fun HiddenScreenRow(item: HiddenScreen) {
+    val context = LocalContext.current
+    PreferenceTemplate(
+        title = { Text(text = item.label) },
+        description = { Text(text = item.detail) },
+        onClick = { context.open(item) },
+        endWidget = {
+            IconButton(onClick = { context.pinToHome(item) }) {
+                MaterialIcon(imageVector = Icons.Rounded.Add, contentDescription = "Add ${item.label} to Home")
+            }
+        },
+    )
+}
+
 private data class HiddenSettingsData(
     val shortcuts: List<HiddenScreen> = emptyList(),
     val all: List<HiddenScreen> = emptyList(),
@@ -187,7 +248,8 @@ fun RumbHiddenSettingsPreferences(
         item {
             Text(
                 text = "Screens from Android's Settings that are hard to find or have no menu entry. " +
-                    "Some phones block a few of them; Rumb only lists what your phone lets it open.",
+                    "Tap to open, or tap + to add one to your Home screen. " +
+                    "Rumb only lists what your phone lets it open.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
@@ -200,7 +262,7 @@ fun RumbHiddenSettingsPreferences(
                 heading = { "Shortcuts" },
                 key = { _, item -> "s:" + item.label },
             ) { _, item ->
-                ClickablePreference(label = item.label, subtitle = item.detail) { context.open(item) }
+                HiddenScreenRow(item)
             }
         }
         item {
@@ -234,7 +296,7 @@ fun RumbHiddenSettingsPreferences(
                 heading = { "All Settings screens" },
                 key = { _, item -> "a:" + item.intent.component?.className + "|" + item.label },
             ) { _, item ->
-                ClickablePreference(label = item.label, subtitle = item.detail) { context.open(item) }
+                HiddenScreenRow(item)
             }
         }
     }

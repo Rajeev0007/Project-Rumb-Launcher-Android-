@@ -345,6 +345,11 @@ fun RumbStylesPreferences(
         }
 
         PreferenceGroup(
+            heading = "Rumb widgets",
+            description = "Long-press an empty spot on Home, tap Widgets, then open Rumb Launcher: Day Clock (big weekday, minimal), Glass Clock (iPhone style), Control Center (Wi-Fi, internet, Bluetooth, torch, volume, display, battery, hidden settings) and Screen Time (today's use and top apps).",
+        ) {}
+
+        PreferenceGroup(
             heading = "Icon changer",
             description = "Long-press any app on Home or in the drawer, tap Edit, then pick a new icon from any installed icon pack or rename the app. Shapes and icon packs are in General.",
         ) {}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="rumb_widget_day_clock" translatable="false">Rumb Day Clock</string>
+    <string name="rumb_widget_day_clock_description" translatable="false">Big weekday, time and date, minimal style</string>
+    <string name="rumb_widget_glass_clock" translatable="false">Rumb Glass Clock</string>
+    <string name="rumb_widget_glass_clock_description" translatable="false">iPhone-style glass card with the time and date</string>
+    <string name="rumb_widget_control_center" translatable="false">Rumb Control Center</string>
+    <string name="rumb_widget_control_center_description" translatable="false">iOS-style tiles: Wi-Fi, internet, Bluetooth, torch, volume, display, battery, hidden settings</string>
+    <string name="rumb_widget_screen_time" translatable="false">Rumb Screen Time</string>
+    <string name="rumb_widget_screen_time_description" translatable="false">Today\'s phone use and your top three apps</string>
+</resources>
