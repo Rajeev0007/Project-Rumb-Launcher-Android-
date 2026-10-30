@@ -33,6 +33,9 @@ data class AppShortcut(
 enum class ThemePreference { SYSTEM, LIGHT, DARK, AMOLED }
 enum class IconShape { SYSTEM, CIRCLE, ROUNDED, SQUIRCLE }
 enum class ClockStyle { LARGE, COMPACT, MINIMAL }
+enum class ClockAlignment { LEFT, CENTER, RIGHT }
+enum class ClockTimeFormat { SYSTEM, TWELVE_HOUR, TWENTY_FOUR_HOUR }
+enum class ClockFont { SANS, SERIF, MONOSPACE }
 enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SETTINGS, OPEN_NOTIFICATIONS, LOCK_LAYOUT }
 enum class HomeItemType { APP, FOLDER, WIDGET }
 
@@ -41,6 +44,8 @@ data class HomeItem(
     val type: HomeItemType,
     val page: Int,
     val cell: Int,
+    val spanX: Int = 1,
+    val spanY: Int = 1,
     val title: String = "",
     val appIds: List<AppId> = emptyList(),
     val widgetId: Int? = null,
@@ -59,17 +64,22 @@ data class LauncherSettings(
     val pageCount: Int = 1,
     val layoutLocked: Boolean = false,
     val clockStyle: ClockStyle = ClockStyle.LARGE,
+    val clockAlignment: ClockAlignment = ClockAlignment.LEFT,
+    val clockTimeFormat: ClockTimeFormat = ClockTimeFormat.SYSTEM,
+    val clockFont: ClockFont = ClockFont.SANS,
+    val clockSize: Int = 58,
     val showDate: Boolean = true,
     val showSeconds: Boolean = false,
     val notificationDots: Boolean = false,
     val swipeUpAction: GestureAction = GestureAction.OPEN_DRAWER,
     val swipeDownAction: GestureAction = GestureAction.NONE,
     val doubleTapAction: GestureAction = GestureAction.LOCK_LAYOUT,
+    val pinchAction: GestureAction = GestureAction.NONE,
     val hiddenApps: Set<AppId> = emptySet(),
     val homeItems: List<HomeItem> = emptyList(),
     val dockApps: List<AppId> = emptyList(),
 ) {
-    companion object { const val CURRENT_SCHEMA = 2 }
+    companion object { const val CURRENT_SCHEMA = 3 }
 }
 
 data class CatalogState(

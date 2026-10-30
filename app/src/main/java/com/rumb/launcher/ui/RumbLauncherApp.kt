@@ -17,7 +17,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rumb.launcher.Destination
 import com.rumb.launcher.LauncherViewModel
+import com.rumb.launcher.domain.HomeItemType
 import com.rumb.launcher.feature.appactions.AppActionsDialog
+import com.rumb.launcher.feature.appactions.FolderAppEntry
 import com.rumb.launcher.feature.appactions.FolderDialog
 import com.rumb.launcher.feature.drawer.AppDrawerScreen
 import com.rumb.launcher.feature.home.HomeScreen
@@ -35,12 +37,19 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
 
     DisposableEffect(controller, model) {
         controller.onImportReady = model::importJson
+        controller.onWidgetReady = model::addWidget
         controller.onError = model::showMessage
         onDispose {
             controller.onImportReady = null
+            controller.onWidgetReady = null
             controller.onError = null
         }
     }
+    val activeWidgetIds = state.settings.homeItems
+        .filter { it.type == HomeItemType.WIDGET }
+        .mapNotNull { it.widgetId }
+        .toSet()
+    LaunchedEffect(activeWidgetIds) { controller.reconcileWidgetIds(activeWidgetIds) }
     LaunchedEffect(state.message) {
         state.message?.let { snackbars.showSnackbar(it); model.consumeMessage() }
     }
@@ -50,7 +59,8 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
         Box(Modifier.fillMaxSize()) {
             when (state.destination) {
                 Destination.HOME -> HomeScreen(
-                    state, model.iconLoader,
+                    state,
+                    model.iconLoader,
                     onOpenDrawer = { model.navigate(Destination.DRAWER) },
                     onOpenSettings = { model.navigate(Destination.SETTINGS) },
                     onWallpaper = model.systemActions::openWallpaperPicker,
@@ -59,9 +69,15 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                     onRefreshApps = model.catalog::refresh,
                     onMoveItem = model::moveItem,
                     onGesture = model::performGesture,
+                    onCreateWidgetView = controller::createWidgetView,
+                    onUpdateWidgetSize = controller::updateWidgetSize,
+                    onRemoveWidget = { itemId ->
+                        model.removeWidget(itemId)?.let(controller::deleteWidgetId)
+                    },
                 )
                 Destination.DRAWER -> AppDrawerScreen(
-                    state, model.iconLoader,
+                    state,
+                    model.iconLoader,
                     onBack = { model.navigate(Destination.HOME) },
                     onSearch = model::search,
                     onRefresh = model.catalog::refresh,
@@ -83,7 +99,12 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                     hiddenAppCount = state.settings.hiddenApps.size,
                     onUnhideAll = model::unhideAll,
                     onLayoutLock = model::updateLayoutLocked,
+                    onAddWidget = controller::requestWidget,
                     onClockStyle = model::updateClockStyle,
+                    onClockAlignment = model::updateClockAlignment,
+                    onClockTimeFormat = model::updateClockTimeFormat,
+                    onClockFont = model::updateClockFont,
+                    onClockSize = model::updateClockSize,
                     onShowDate = model::updateShowDate,
                     onShowSeconds = model::updateShowSeconds,
                     onNotificationDots = model::updateNotificationDots,
@@ -91,6 +112,7 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                     onSwipeUp = model::updateSwipeUp,
                     onSwipeDown = model::updateSwipeDown,
                     onDoubleTap = model::updateDoubleTap,
+                    onPinch = model::updatePinch,
                     onHomeSettings = model.systemActions::openHomeSettings,
                     onWallpaper = model.systemActions::openWallpaperPicker,
                     onExport = { controller.exportJson(model.exportJson()) },
@@ -119,9 +141,14 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
         state.openedFolder?.let { folder ->
             FolderDialog(
                 folder = folder,
-                apps = folder.appIds.mapNotNull { id -> state.catalog.apps.firstOrNull { it.id == id } },
+                entries = folder.appIds.map { id ->
+                    FolderAppEntry(id, state.catalog.apps.firstOrNull { it.id == id })
+                },
+                editable = !state.settings.layoutLocked,
                 onDismiss = { model.openFolder(null) },
                 onLaunch = model::launch,
+                onRename = { model.renameFolder(folder.id, it) },
+                onRemoveApp = { model.removeFolderApp(folder.id, it) },
                 onRemove = { model.removeHomeItem(folder); model.openFolder(null) },
             )
         }

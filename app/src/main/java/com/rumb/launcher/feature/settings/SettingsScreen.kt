@@ -37,7 +37,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rumb.launcher.BuildConfig
+import com.rumb.launcher.domain.ClockAlignment
+import com.rumb.launcher.domain.ClockFont
 import com.rumb.launcher.domain.ClockStyle
+import com.rumb.launcher.domain.ClockTimeFormat
 import com.rumb.launcher.domain.GestureAction
 import com.rumb.launcher.domain.IconShape
 import com.rumb.launcher.domain.LauncherSettings
@@ -59,7 +62,12 @@ fun SettingsScreen(
     hiddenAppCount: Int,
     onUnhideAll: () -> Unit,
     onLayoutLock: (Boolean) -> Unit,
+    onAddWidget: () -> Unit,
     onClockStyle: (ClockStyle) -> Unit,
+    onClockAlignment: (ClockAlignment) -> Unit,
+    onClockTimeFormat: (ClockTimeFormat) -> Unit,
+    onClockFont: (ClockFont) -> Unit,
+    onClockSize: (Int) -> Unit,
     onShowDate: (Boolean) -> Unit,
     onShowSeconds: (Boolean) -> Unit,
     onNotificationDots: (Boolean) -> Unit,
@@ -67,11 +75,13 @@ fun SettingsScreen(
     onSwipeUp: (GestureAction) -> Unit,
     onSwipeDown: (GestureAction) -> Unit,
     onDoubleTap: (GestureAction) -> Unit,
+    onPinch: (GestureAction) -> Unit,
     onHomeSettings: () -> Unit,
     onWallpaper: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
 ) {
+    val supportedGestureActions = GestureAction.entries.filter { it != GestureAction.OPEN_NOTIFICATIONS }
     Scaffold(topBar = {
         Row(Modifier.fillMaxWidth().safeDrawingPadding().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to home") }
@@ -104,49 +114,46 @@ fun SettingsScreen(
             Choices((4..8).toList(), settings.rows, Int::toString, onRows)
             Label("Pages")
             Choices((1..9).toList(), settings.pageCount, Int::toString, onPages)
-            Toggle("Lock layout", "Prevents moving or combining home items", settings.layoutLocked, onLayoutLock)
+            Toggle("Lock layout", "Prevents moving, combining, adding, removing, or editing home items", settings.layoutLocked, onLayoutLock)
             if (hiddenAppCount > 0) OutlinedButton(onClick = onUnhideAll, Modifier.fillMaxWidth()) {
                 Text("Restore $hiddenAppCount hidden ${if (hiddenAppCount == 1) "app" else "apps"}")
             }
-            OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.AddBox, null); Spacer(Modifier.width(8.dp)); Text("Widgets unavailable in this build")
+            OutlinedButton(onClick = onAddWidget, enabled = !settings.layoutLocked, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.AddBox, null); Spacer(Modifier.width(8.dp)); Text("Add widget")
             }
             Text(
-                "Widget hosting remains disabled until provider sizing, resizing, and binding recovery can be guaranteed.",
+                "Android's system picker handles widget selection and any provider configuration. Widget bindings remain local to this device.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Heading("Clock")
+            Label("Style")
             Choices(ClockStyle.entries, settings.clockStyle, { it.label() }, onClockStyle)
+            Label("Alignment")
+            Choices(ClockAlignment.entries, settings.clockAlignment, { it.label() }, onClockAlignment)
+            Label("Time format")
+            Choices(ClockTimeFormat.entries, settings.clockTimeFormat, { it.label() }, onClockTimeFormat)
+            Label("Font")
+            Choices(ClockFont.entries, settings.clockFont, { it.label() }, onClockFont)
+            Label("Size")
+            Choices(listOf(30, 40, 50, 58, 66, 72), settings.clockSize, { "$it sp" }, onClockSize)
             Toggle("Show date", null, settings.showDate, onShowDate)
             Toggle("Show seconds", "Updates every second and uses slightly more power", settings.showSeconds, onShowSeconds)
 
             Heading("Gestures")
             Label("Swipe up")
-            Choices(
-                GestureAction.entries.filter { it != GestureAction.OPEN_NOTIFICATIONS },
-                settings.swipeUpAction,
-                { it.label() },
-                onSwipeUp,
-            )
+            Choices(supportedGestureActions, settings.swipeUpAction, { it.label() }, onSwipeUp)
             Label("Swipe down")
-            Choices(
-                GestureAction.entries.filter { it != GestureAction.OPEN_NOTIFICATIONS },
-                settings.swipeDownAction,
-                { it.label() },
-                onSwipeDown,
-            )
+            Choices(supportedGestureActions, settings.swipeDownAction, { it.label() }, onSwipeDown)
             Label("Double tap")
-            Choices(
-                GestureAction.entries.filter { it != GestureAction.OPEN_NOTIFICATIONS },
-                settings.doubleTapAction,
-                { it.label() },
-                onDoubleTap,
-            )
+            Choices(supportedGestureActions, settings.doubleTapAction, { it.label() }, onDoubleTap)
+            Label("Pinch")
+            Choices(supportedGestureActions, settings.pinchAction, { it.label() }, onPinch)
             Text(
-                "Pinch is intentionally disabled because it conflicts with page and app touch handling. Android also provides no public API for third-party launchers to expand notifications. Rumb does not replace the system lock screen.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Pinch requires two pointers to change span and is observed without consuming app, widget, drag, or page events. Android provides no public API for third-party launchers to expand notifications. Rumb does not replace the secure system lock screen.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 10.dp),
             )
 
@@ -157,7 +164,7 @@ fun SettingsScreen(
             }
 
             Heading("Backup")
-            Text("Exports layout and settings as versioned JSON. Device-specific widget bindings are excluded.", style = MaterialTheme.typography.bodySmall)
+            Text("Exports layout and settings as versioned JSON. Device-specific widget IDs and bindings are excluded.", style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onExport, Modifier.weight(1f)) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(6.dp)); Text("Export") }
                 OutlinedButton(onClick = onImport, Modifier.weight(1f)) { Icon(Icons.Default.Restore, null); Spacer(Modifier.width(6.dp)); Text("Import") }
@@ -200,6 +207,13 @@ private fun <T> Choices(options: List<T>, selected: T, label: (T) -> String, onS
 private fun ThemePreference.label() = name.lowercase().replaceFirstChar(Char::uppercase)
 private fun IconShape.label() = name.lowercase().replaceFirstChar(Char::uppercase)
 private fun ClockStyle.label() = name.lowercase().replaceFirstChar(Char::uppercase)
+private fun ClockAlignment.label() = name.lowercase().replaceFirstChar(Char::uppercase)
+private fun ClockFont.label() = name.lowercase().replaceFirstChar(Char::uppercase)
+private fun ClockTimeFormat.label() = when (this) {
+    ClockTimeFormat.SYSTEM -> "System"
+    ClockTimeFormat.TWELVE_HOUR -> "12-hour"
+    ClockTimeFormat.TWENTY_FOUR_HOUR -> "24-hour"
+}
 private fun GestureAction.label() = when (this) {
     GestureAction.NONE -> "None"
     GestureAction.OPEN_DRAWER -> "All apps"

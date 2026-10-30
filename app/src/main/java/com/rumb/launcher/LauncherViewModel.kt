@@ -8,7 +8,10 @@ import com.rumb.launcher.data.LauncherStateRepository
 import com.rumb.launcher.domain.AppId
 import com.rumb.launcher.domain.AppShortcut
 import com.rumb.launcher.domain.CatalogState
+import com.rumb.launcher.domain.ClockAlignment
+import com.rumb.launcher.domain.ClockFont
 import com.rumb.launcher.domain.ClockStyle
+import com.rumb.launcher.domain.ClockTimeFormat
 import com.rumb.launcher.domain.GestureAction
 import com.rumb.launcher.domain.HomeItem
 import com.rumb.launcher.domain.HomeItemType
@@ -16,11 +19,19 @@ import com.rumb.launcher.domain.IconShape
 import com.rumb.launcher.domain.InstalledApp
 import com.rumb.launcher.domain.LauncherSettings
 import com.rumb.launcher.domain.ThemePreference
+import com.rumb.launcher.domain.findFreePlacement
+import com.rumb.launcher.domain.isRegionFree
+import com.rumb.launcher.domain.layoutSpanX
+import com.rumb.launcher.domain.layoutSpanY
+import com.rumb.launcher.domain.occupiedCells
+import com.rumb.launcher.domain.packHomeItems
 import com.rumb.launcher.platform.SystemActions
+import com.rumb.launcher.platform.WidgetSelection
 import com.rumb.launcher.platform.apps.LauncherAppsCatalog
 import com.rumb.launcher.platform.icons.AppIconLoader
 import com.rumb.launcher.platform.notifications.NotificationDotStore
 import java.util.UUID
+import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,7 +51,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
     private val destination = MutableStateFlow(Destination.HOME)
     private val search = MutableStateFlow("")
     private val selectedApp = MutableStateFlow<InstalledApp?>(null)
-    private val openedFolder = MutableStateFlow<HomeItem?>(null)
+    private val openedFolderId = MutableStateFlow<String?>(null)
     private val shortcuts = MutableStateFlow<List<AppShortcut>>(emptyList())
     private val message = MutableStateFlow<String?>(null)
     private var shortcutJob: Job? = null
@@ -52,11 +63,11 @@ class LauncherViewModel(context: Context) : ViewModel() {
 
     val uiState: StateFlow<LauncherUiState> = combine(
         baseState,
-        openedFolder,
+        openedFolderId,
         shortcuts,
         NotificationDotStore.counts,
         message,
-    ) { base, folder, availableShortcuts, counts, currentMessage ->
+    ) { base, folderId, availableShortcuts, counts, currentMessage ->
         val visibleApps = base.catalog.apps.filterNot { it.id in base.settings.hiddenApps }
         LauncherUiState(
             settings = base.settings,
@@ -69,7 +80,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
             destination = base.destination,
             search = base.query,
             selectedApp = base.selectedApp,
-            openedFolder = folder,
+            openedFolder = folderId?.let { id -> base.settings.homeItems.firstOrNull { it.id == id && it.type == HomeItemType.FOLDER } },
             shortcuts = availableShortcuts,
             notificationCounts = if (base.settings.notificationDots) counts else emptyMap(),
             message = currentMessage,
@@ -87,7 +98,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
             if (selectedApp.value?.id == app.id) shortcuts.value = result
         }
     }
-    fun openFolder(folder: HomeItem?) { openedFolder.value = folder }
+    fun openFolder(folder: HomeItem?) { openedFolderId.value = folder?.id }
     fun consumeMessage() { message.value = null }
     fun showMessage(value: String) { message.value = value }
 
@@ -95,31 +106,83 @@ class LauncherViewModel(context: Context) : ViewModel() {
     fun launchShortcut(shortcut: AppShortcut) = safe("Shortcut could not be opened") { catalog.launchShortcut(shortcut) }
 
     fun pin(app: InstalledApp) = repository.update { state ->
+        if (state.layoutLocked) {
+            showMessage("Unlock the home layout before adding apps")
+            return@update state
+        }
         if (state.homeItems.any { app.id in it.appIds } || app.id in state.dockApps) state else {
-            val capacity = state.columns * state.rows
-            val occupied = state.homeItems.groupBy { it.page }.mapValues { entry -> entry.value.map(HomeItem::cell).toSet() }
-            val existingPage = (0 until state.pageCount).firstOrNull { occupied[it].orEmpty().size < capacity }
-            val targetPage = existingPage ?: if (state.pageCount < 9) state.pageCount else state.pageCount - 1
-            val pages = maxOf(state.pageCount, targetPage + 1)
-            val cell = (0 until capacity).firstOrNull { it !in occupied[targetPage].orEmpty() }
-            if (cell == null) {
+            val placement = findFreePlacement(state.homeItems, state.columns, state.rows, 9)
+            if (placement == null) {
                 showMessage("All nine home pages are full")
                 return@update state
             }
             state.copy(
-                pageCount = pages,
+                pageCount = maxOf(state.pageCount, placement.page + 1),
                 homeItems = state.homeItems + HomeItem(
                     id = UUID.randomUUID().toString(),
                     type = HomeItemType.APP,
-                    page = targetPage,
-                    cell = cell,
+                    page = placement.page,
+                    cell = placement.cell,
                     appIds = listOf(app.id),
                 ),
             )
         }
     }
 
+    fun addWidget(widget: WidgetSelection): Boolean {
+        var added = false
+        var failure: String? = null
+        repository.update { state ->
+            when {
+                state.layoutLocked -> {
+                    failure = "Unlock the home layout before adding a widget"
+                    state
+                }
+                state.homeItems.any { it.widgetId == widget.appWidgetId } -> {
+                    added = true
+                    state
+                }
+                else -> {
+                    val density = appContext.resources.displayMetrics.density.coerceAtLeast(1f)
+                    val configuration = appContext.resources.configuration
+                    val cellWidthDp = configuration.screenWidthDp.coerceAtLeast(state.columns).toFloat() / state.columns
+                    val usableHeightDp = (configuration.screenHeightDp - 200).coerceAtLeast(state.rows * 48)
+                    val cellHeightDp = usableHeightDp.toFloat() / state.rows
+                    val spanX = ceil(widget.minWidthPx / density / cellWidthDp).toInt().coerceIn(1, state.columns)
+                    val spanY = ceil(widget.minHeightPx / density / cellHeightDp).toInt().coerceIn(1, state.rows)
+                    val placement = findFreePlacement(state.homeItems, state.columns, state.rows, 9, spanX, spanY)
+                    if (placement == null) {
+                        failure = "No free ${spanX}×$spanY area is available across nine pages"
+                        state
+                    } else {
+                        added = true
+                        state.copy(
+                            pageCount = maxOf(state.pageCount, placement.page + 1),
+                            homeItems = state.homeItems + HomeItem(
+                                id = UUID.randomUUID().toString(),
+                                type = HomeItemType.WIDGET,
+                                page = placement.page,
+                                cell = placement.cell,
+                                spanX = spanX,
+                                spanY = spanY,
+                                widgetId = widget.appWidgetId,
+                                widgetProvider = widget.provider,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        failure?.let(::showMessage)
+        if (added) navigate(Destination.HOME)
+        return added
+    }
+
     fun unpin(app: InstalledApp) = repository.update { state ->
+        if (state.layoutLocked) {
+            showMessage("Unlock the home layout before removing apps")
+            return@update state
+        }
         state.copy(
             homeItems = removeAppFromHome(state.homeItems, app.id),
             dockApps = state.dockApps - app.id,
@@ -127,6 +190,10 @@ class LauncherViewModel(context: Context) : ViewModel() {
     }
 
     fun toggleHidden(app: InstalledApp) = repository.update { state ->
+        if (state.layoutLocked) {
+            showMessage("Unlock the home layout before hiding apps")
+            return@update state
+        }
         val hidden = if (app.id in state.hiddenApps) state.hiddenApps - app.id else state.hiddenApps + app.id
         state.copy(
             hiddenApps = hidden,
@@ -136,6 +203,10 @@ class LauncherViewModel(context: Context) : ViewModel() {
     }
 
     fun toggleDock(app: InstalledApp) = repository.update { state ->
+        if (state.layoutLocked) {
+            showMessage("Unlock the home layout before changing the dock")
+            return@update state
+        }
         val dock = if (app.id in state.dockApps) state.dockApps - app.id else {
             if (state.dockApps.size >= 5) {
                 showMessage("The dock can hold up to five apps")
@@ -149,16 +220,27 @@ class LauncherViewModel(context: Context) : ViewModel() {
     fun moveItem(itemId: String, columnDelta: Int, rowDelta: Int) = repository.update { state ->
         if (state.layoutLocked) return@update state
         val item = state.homeItems.firstOrNull { it.id == itemId } ?: return@update state
+        if (item.type == HomeItemType.WIDGET) return@update state
+        val spanX = item.layoutSpanX(state.columns)
+        val spanY = item.layoutSpanY(state.rows)
         val oldRow = item.cell / state.columns
         val oldColumn = item.cell % state.columns
-        val newColumn = (oldColumn + columnDelta).coerceIn(0, state.columns - 1)
-        val newRow = (oldRow + rowDelta).coerceIn(0, state.rows - 1)
+        val newColumn = (oldColumn + columnDelta).coerceIn(0, state.columns - spanX)
+        val newRow = (oldRow + rowDelta).coerceIn(0, state.rows - spanY)
         val target = newRow * state.columns + newColumn
-        val collision = state.homeItems.firstOrNull { it.page == item.page && it.cell == target && it.id != item.id }
+        if (target == item.cell) return@update state
+        val targetCells = occupiedCells(item.copy(cell = target), state.columns, state.rows)
+        val collisions = state.homeItems.filter { other ->
+            other.id != item.id && other.page == item.page && occupiedCells(other, state.columns, state.rows).any(targetCells::contains)
+        }
+        if (collisions.isEmpty() && isRegionFree(
+                state.homeItems, item.page, target, spanX, spanY, state.columns, state.rows, item.id,
+            )
+        ) return@update state.copy(homeItems = state.homeItems.map { if (it.id == item.id) it.copy(cell = target) else it })
+
+        val collision = collisions.singleOrNull()
         when {
-            target == item.cell -> state
-            collision == null -> state.copy(homeItems = state.homeItems.map { if (it.id == item.id) it.copy(cell = target) else it })
-            item.type == HomeItemType.APP && collision.type == HomeItemType.APP -> state.copy(
+            item.type == HomeItemType.APP && collision?.type == HomeItemType.APP && collision.cell == target -> state.copy(
                 homeItems = state.homeItems.filterNot { it.id == item.id || it.id == collision.id } + HomeItem(
                     id = UUID.randomUUID().toString(),
                     type = HomeItemType.FOLDER,
@@ -168,7 +250,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
                     appIds = (collision.appIds + item.appIds).distinctBy(AppId::stableKey),
                 ),
             )
-            item.type == HomeItemType.APP && collision.type == HomeItemType.FOLDER -> {
+            item.type == HomeItemType.APP && collision?.type == HomeItemType.FOLDER && collision.cell == target -> {
                 if (collision.appIds.size >= 24) {
                     showMessage("Folders can hold up to 24 apps")
                     state
@@ -178,17 +260,52 @@ class LauncherViewModel(context: Context) : ViewModel() {
                     },
                 )
             }
-            else -> state.copy(homeItems = state.homeItems.map {
-                when (it.id) {
-                    item.id -> it.copy(cell = collision.cell)
-                    collision.id -> it.copy(cell = item.cell)
-                    else -> it
-                }
+            collision?.type == HomeItemType.WIDGET -> {
+                showMessage("Apps cannot be dropped onto widgets")
+                state
+            }
+            else -> state
+        }
+    }
+
+    fun removeWidget(itemId: String): Int? {
+        val state = repository.state.value
+        if (state.layoutLocked) return null
+        val item = state.homeItems.firstOrNull { it.id == itemId && it.type == HomeItemType.WIDGET } ?: return null
+        repository.update { it.copy(homeItems = it.homeItems.filterNot { homeItem -> homeItem.id == itemId }) }
+        return item.widgetId
+    }
+
+    fun removeHomeItem(item: HomeItem) = repository.update { state ->
+        if (state.layoutLocked) state else state.copy(homeItems = state.homeItems.filterNot { it.id == item.id })
+    }
+
+    fun renameFolder(folderId: String, rawTitle: String) {
+        val title = rawTitle.trim()
+        if (title.length !in 1..48) {
+            showMessage("Folder names must be 1–48 characters")
+            return
+        }
+        repository.update { state ->
+            if (state.layoutLocked) state else state.copy(homeItems = state.homeItems.map {
+                if (it.id == folderId && it.type == HomeItemType.FOLDER) it.copy(title = title) else it
             })
         }
     }
 
-    fun removeHomeItem(item: HomeItem) = repository.update { it.copy(homeItems = it.homeItems - item) }
+    fun removeFolderApp(folderId: String, appId: AppId) = repository.update { state ->
+        if (state.layoutLocked) return@update state
+        state.copy(homeItems = state.homeItems.mapNotNull { item ->
+            if (item.id != folderId || item.type != HomeItemType.FOLDER) return@mapNotNull item
+            val remaining = item.appIds.filterNot { it == appId }
+            when {
+                remaining.isEmpty() -> null
+                remaining.size == 1 -> item.copy(type = HomeItemType.APP, title = "", appIds = remaining)
+                else -> item.copy(appIds = remaining)
+            }
+        })
+    }
+
     fun importJson(raw: String) = runCatching { repository.importJson(raw) }
         .onSuccess { showMessage("Layout imported. Widget bindings were not imported.") }
         .onFailure { showMessage(it.message ?: "Import failed") }
@@ -202,18 +319,27 @@ class LauncherViewModel(context: Context) : ViewModel() {
     fun updateRows(value: Int) = reflowGrid(repository.state.value.columns, value)
     fun updateIconSize(value: Int) = update { it.copy(iconSize = value) }
     fun updatePageCount(value: Int) = update { state ->
+        if (state.layoutLocked) {
+            showMessage("Unlock the home layout before changing page count")
+            return@update state
+        }
         val occupiedPages = (state.homeItems.maxOfOrNull(HomeItem::page) ?: 0) + 1
         state.copy(pageCount = value.coerceAtLeast(occupiedPages))
     }
     fun unhideAll() = update { it.copy(hiddenApps = emptySet()) }
     fun updateLayoutLocked(value: Boolean) = update { it.copy(layoutLocked = value) }
     fun updateClockStyle(value: ClockStyle) = update { it.copy(clockStyle = value) }
+    fun updateClockAlignment(value: ClockAlignment) = update { it.copy(clockAlignment = value) }
+    fun updateClockTimeFormat(value: ClockTimeFormat) = update { it.copy(clockTimeFormat = value) }
+    fun updateClockFont(value: ClockFont) = update { it.copy(clockFont = value) }
+    fun updateClockSize(value: Int) = update { it.copy(clockSize = value) }
     fun updateShowDate(value: Boolean) = update { it.copy(showDate = value) }
     fun updateShowSeconds(value: Boolean) = update { it.copy(showSeconds = value) }
     fun updateNotificationDots(value: Boolean) = update { it.copy(notificationDots = value) }
     fun updateSwipeUp(value: GestureAction) = update { it.copy(swipeUpAction = value) }
     fun updateSwipeDown(value: GestureAction) = update { it.copy(swipeDownAction = value) }
     fun updateDoubleTap(value: GestureAction) = update { it.copy(doubleTapAction = value) }
+    fun updatePinch(value: GestureAction) = update { it.copy(pinchAction = value) }
 
     fun performGesture(action: GestureAction) {
         when (action) {
@@ -237,22 +363,26 @@ class LauncherViewModel(context: Context) : ViewModel() {
     }
 
     private fun reflowGrid(columns: Int, rows: Int) = repository.update { state ->
+        if (state.layoutLocked) {
+            showMessage("Unlock the home layout before changing the grid")
+            return@update state
+        }
         val safeColumns = columns.coerceIn(4, 8)
         val safeRows = rows.coerceIn(4, 8)
-        val capacity = safeColumns * safeRows
-        if (state.homeItems.size > capacity * 9) {
+        val resized = state.homeItems.map { item ->
+            item.copy(spanX = item.layoutSpanX(safeColumns), spanY = item.layoutSpanY(safeRows))
+        }
+        val packed = packHomeItems(resized, safeColumns, safeRows, 9, preservePreferredPositions = false)
+        if (packed == null) {
             showMessage("The grid cannot be reduced without removing home items")
             return@update state
         }
-        val sortedItems = state.homeItems.sortedWith(compareBy(HomeItem::page, HomeItem::cell))
-        val requiredPages = ((sortedItems.size + capacity - 1) / capacity).coerceAtLeast(1)
+        val requiredPages = ((packed.maxOfOrNull(HomeItem::page) ?: 0) + 1).coerceAtLeast(1)
         state.copy(
             columns = safeColumns,
             rows = safeRows,
             pageCount = maxOf(state.pageCount, requiredPages),
-            homeItems = sortedItems.mapIndexed { index, item ->
-                item.copy(page = index / capacity, cell = index % capacity)
-            },
+            homeItems = packed,
         )
     }
 

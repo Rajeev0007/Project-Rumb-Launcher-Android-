@@ -4,13 +4,17 @@ import android.content.Context
 import android.os.Process
 import android.os.UserManager
 import com.rumb.launcher.domain.AppId
+import com.rumb.launcher.domain.ClockAlignment
+import com.rumb.launcher.domain.ClockFont
 import com.rumb.launcher.domain.ClockStyle
+import com.rumb.launcher.domain.ClockTimeFormat
 import com.rumb.launcher.domain.GestureAction
 import com.rumb.launcher.domain.HomeItem
 import com.rumb.launcher.domain.HomeItemType
 import com.rumb.launcher.domain.IconShape
 import com.rumb.launcher.domain.LauncherSettings
 import com.rumb.launcher.domain.ThemePreference
+import com.rumb.launcher.domain.normalizeHomePlacements
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,8 +50,14 @@ class LauncherStateRepository(context: Context) {
         if (raw.toByteArray(Charsets.UTF_8).size > MAX_IMPORT_BYTES) {
             throw IllegalArgumentException("Backup is larger than 1 MB")
         }
+        val json = try {
+            JSONObject(raw)
+        } catch (error: JSONException) {
+            throw IllegalArgumentException("Backup is not valid Rumb Launcher JSON", error)
+        }
+        validatePortableLayout(json)
         val parsed = try {
-            decode(JSONObject(raw), allowWidgets = false)
+            decode(json, allowWidgets = false)
         } catch (error: JSONException) {
             throw IllegalArgumentException("Backup is not valid Rumb Launcher JSON", error)
         }
@@ -57,7 +67,7 @@ class LauncherStateRepository(context: Context) {
     private fun load(): LauncherSettings {
         val json = preferences.getString(KEY_STATE, null)
         if (json != null) {
-            runCatching { decode(JSONObject(json), allowWidgets = false) }.getOrNull()?.let { return normalize(it) }
+            runCatching { decode(JSONObject(json), allowWidgets = true) }.getOrNull()?.let { return normalize(it) }
         }
         return migrateLegacy()
     }
@@ -104,26 +114,51 @@ class LauncherStateRepository(context: Context) {
         val columns = value.columns.coerceIn(4, 8)
         val rows = value.rows.coerceIn(4, 8)
         val pages = value.pageCount.coerceIn(1, 9)
-        val capacity = columns * rows
-        val occupied = mutableSetOf<Pair<Int, Int>>()
-        val items = value.homeItems
-            .asSequence()
-            .filter { it.page in 0 until pages && it.cell in 0 until capacity }
-            .filter { it.type == HomeItemType.WIDGET || it.appIds.isNotEmpty() }
-            .filter { occupied.add(it.page to it.cell) }
-            .map { item ->
-                item.copy(
-                    title = item.title.take(48),
-                    appIds = item.appIds.distinctBy(AppId::stableKey).take(24),
-                )
+        val sanitized = value.homeItems.mapNotNull { item ->
+            val apps = item.appIds.distinctBy(AppId::stableKey).take(24)
+            when (item.type) {
+                HomeItemType.APP -> apps.firstOrNull()?.let {
+                    item.copy(title = "", appIds = listOf(it), spanX = 1, spanY = 1, widgetId = null, widgetProvider = null)
+                }
+                HomeItemType.FOLDER -> when {
+                    apps.isEmpty() -> null
+                    apps.size == 1 -> item.copy(
+                        type = HomeItemType.APP,
+                        title = "",
+                        appIds = apps,
+                        spanX = 1,
+                        spanY = 1,
+                        widgetId = null,
+                        widgetProvider = null,
+                    )
+                    else -> item.copy(
+                        title = item.title.trim().take(48).ifBlank { "Folder" },
+                        appIds = apps,
+                        spanX = 1,
+                        spanY = 1,
+                        widgetId = null,
+                        widgetProvider = null,
+                    )
+                }
+                HomeItemType.WIDGET -> if (item.widgetId != null && item.widgetId >= 0 && !item.widgetProvider.isNullOrBlank()) {
+                    item.copy(title = item.title.take(48), appIds = emptyList())
+                } else null
             }
-            .toList()
+        }.distinctBy(HomeItem::id)
+        val items = normalizeHomePlacements(
+            source = sanitized,
+            columns = columns,
+            rows = rows,
+            maxPages = 9,
+        )
+        val normalizedPages = maxOf(pages, (items.maxOfOrNull(HomeItem::page) ?: 0) + 1)
         return value.copy(
             schemaVersion = LauncherSettings.CURRENT_SCHEMA,
             columns = columns,
             rows = rows,
             iconSize = value.iconSize.coerceIn(42, 72),
-            pageCount = pages,
+            pageCount = normalizedPages,
+            clockSize = value.clockSize.coerceIn(28, 72),
             hiddenApps = value.hiddenApps.take(1000).toSet(),
             homeItems = items,
             dockApps = value.dockApps.distinctBy(AppId::stableKey).take(5),
@@ -147,12 +182,17 @@ class LauncherStateRepository(context: Context) {
         put("pageCount", value.pageCount)
         put("layoutLocked", value.layoutLocked)
         put("clockStyle", value.clockStyle.name)
+        put("clockAlignment", value.clockAlignment.name)
+        put("clockTimeFormat", value.clockTimeFormat.name)
+        put("clockFont", value.clockFont.name)
+        put("clockSize", value.clockSize)
         put("showDate", value.showDate)
         put("showSeconds", value.showSeconds)
         put("notificationDots", value.notificationDots)
         put("swipeUpAction", value.swipeUpAction.name)
         put("swipeDownAction", value.swipeDownAction.name)
         put("doubleTapAction", value.doubleTapAction.name)
+        put("pinchAction", value.pinchAction.name)
         put("hiddenApps", JSONArray(value.hiddenApps.map { encodeId(it, portableIds) }))
         put("dockApps", JSONArray(value.dockApps.map { encodeId(it, portableIds) }))
         put("homeItems", JSONArray().apply {
@@ -162,6 +202,8 @@ class LauncherStateRepository(context: Context) {
                     put("type", item.type.name)
                     put("page", item.page)
                     put("cell", item.cell)
+                    put("spanX", item.spanX)
+                    put("spanY", item.spanY)
                     put("title", item.title)
                     put("apps", JSONArray(item.appIds.map { encodeId(it, portableIds) }))
                     if (includeDeviceBindings) item.widgetId?.let { put("widgetId", it) }
@@ -185,6 +227,8 @@ class LauncherStateRepository(context: Context) {
                 type = type,
                 page = item.optInt("page", 0),
                 cell = item.optInt("cell", 0),
+                spanX = item.optInt("spanX", 1),
+                spanY = item.optInt("spanY", 1),
                 title = item.optString("title"),
                 appIds = item.optJSONArray("apps").toStrings().mapNotNull(::parseStoredId),
                 widgetId = item.optInt("widgetId", -1).takeIf { it >= 0 && allowWidgets },
@@ -203,17 +247,58 @@ class LauncherStateRepository(context: Context) {
                 pageCount = json.optInt("pageCount", 1),
                 layoutLocked = json.optBoolean("layoutLocked", false),
                 clockStyle = enumValue(enum("clockStyle", "LARGE"), ClockStyle.LARGE),
+                clockAlignment = enumValue(enum("clockAlignment", "LEFT"), ClockAlignment.LEFT),
+                clockTimeFormat = enumValue(enum("clockTimeFormat", "SYSTEM"), ClockTimeFormat.SYSTEM),
+                clockFont = enumValue(enum("clockFont", "SANS"), ClockFont.SANS),
+                clockSize = json.optInt("clockSize", defaultClockSize(json)),
                 showDate = json.optBoolean("showDate", true),
                 showSeconds = json.optBoolean("showSeconds", false),
                 notificationDots = json.optBoolean("notificationDots", false),
                 swipeUpAction = enumValue(enum("swipeUpAction", "OPEN_DRAWER"), GestureAction.OPEN_DRAWER),
                 swipeDownAction = enumValue(enum("swipeDownAction", "NONE"), GestureAction.NONE),
                 doubleTapAction = enumValue(enum("doubleTapAction", "LOCK_LAYOUT"), GestureAction.LOCK_LAYOUT),
+                pinchAction = enumValue(enum("pinchAction", "NONE"), GestureAction.NONE),
                 hiddenApps = ids("hiddenApps"),
                 dockApps = json.optJSONArray("dockApps").toStrings().mapNotNull(::parseStoredId),
                 homeItems = homeItems,
             ),
         )
+    }
+
+    private fun validatePortableLayout(json: JSONObject) {
+        if (json.optString("format") != FORMAT) throw IllegalArgumentException("Not a Rumb Launcher backup")
+        val columns = json.optInt("columns", 5)
+        val rows = json.optInt("rows", 5)
+        val pages = json.optInt("pageCount", 1)
+        if (columns !in 4..8 || rows !in 4..8 || pages !in 1..9) {
+            throw IllegalArgumentException("Backup contains an invalid home grid")
+        }
+        val ids = mutableSetOf<String>()
+        val occupied = mutableSetOf<Pair<Int, Int>>()
+        json.optJSONArray("homeItems").objects().forEach { item ->
+            val type = runCatching { HomeItemType.valueOf(item.optString("type")) }.getOrNull()
+                ?: throw IllegalArgumentException("Backup contains an unknown home item")
+            if (type == HomeItemType.WIDGET) return@forEach
+            val id = item.optString("id").takeIf(String::isNotBlank)
+                ?: throw IllegalArgumentException("Backup contains a home item without an ID")
+            if (!ids.add(id)) throw IllegalArgumentException("Backup contains duplicate home item IDs")
+            val page = item.optInt("page", -1)
+            val cell = item.optInt("cell", -1)
+            if (page !in 0 until pages || cell !in 0 until columns * rows || !occupied.add(page to cell)) {
+                throw IllegalArgumentException("Backup contains overlapping or out-of-bounds home items")
+            }
+            val apps = item.optJSONArray("apps")
+            val minimumApps = if (type == HomeItemType.FOLDER) 2 else 1
+            if (apps == null || apps.length() < minimumApps) {
+                throw IllegalArgumentException("Backup contains an invalid app or folder")
+            }
+        }
+    }
+
+    private fun defaultClockSize(json: JSONObject): Int = when (json.optString("clockStyle", "LARGE")) {
+        "COMPACT" -> 40
+        "MINIMAL" -> 30
+        else -> 58
     }
 
     private fun encodeId(id: AppId, portable: Boolean): String {
