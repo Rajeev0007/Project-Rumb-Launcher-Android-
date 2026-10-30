@@ -29,9 +29,11 @@ concurrency:
 env:
   # Lawnchair 15 Beta 3 (tag v15.0.0-beta3.0), the latest upstream release.
   LAWNCHAIR_REF: 505dbc40e6154c05158b5d0271c45f6a885a411b
-  RUMB_VERSION_NAME: "Rumb 4.0.0 (Lawnchair 15 Beta 3)"
-  RELEASE_TAG: v4.0.0
-  RELEASE_TITLE: "Rumb Launcher 4.0.0 (Lawnchair edition)"
+  RUMB_VERSION_NAME: "Rumb 4.1.0 (Lawnchair 15 Beta 3)"
+  # Must increase every release. Lawnchair 15 Beta 3 is 1500020300; Rumb adds its own patch number.
+  RUMB_VERSION_CODE: "1500020310"
+  RELEASE_TAG: v4.1.0
+  RELEASE_TITLE: "Rumb Launcher 4.1.0"
 
 jobs:
   build:
@@ -67,7 +69,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Apply Rumb branding
-        run: python3 rumb/lawnchair-edition/apply_branding.py lawnchair "$RUMB_VERSION_NAME"
+        run: python3 rumb/lawnchair-edition/apply_branding.py lawnchair "$RUMB_VERSION_NAME" "$RUMB_VERSION_CODE"
 
       - name: Prepare release signing key
         working-directory: lawnchair
@@ -123,7 +125,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES="Rumb Launcher built from Lawnchair (GPL-3.0) with Rumb branding. Android 8.0 or newer.
+          NOTES="Rumb Launcher by Rajeev0007, built on Lawnchair (GPL-3.0). Android 8.0 or newer.
 
           Source: Lawnchair https://github.com/LawnchairLauncher/lawnchair/tree/${LAWNCHAIR_REF} with the Rumb branding in https://github.com/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA}/lawnchair-edition"
           if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
