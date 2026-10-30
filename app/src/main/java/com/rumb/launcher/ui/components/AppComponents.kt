@@ -30,14 +30,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
@@ -113,14 +114,9 @@ fun AppIconImage(
     val key = remember(appId, sizePx, densityDpi, appearance, tint) {
         iconLoader.cacheKey(appId, sizePx, densityDpi, appearance, tint)
     }
-    val initial = remember(key) { iconLoader.peek(key) }
-    val bitmap by produceState<ImageBitmap?>(initialValue = initial, key1 = key) {
-        val cached = iconLoader.peek(key)
-        if (cached != null) {
-            value = cached
-        } else {
-            value = iconLoader.load(appId, sizePx, densityDpi, appearance, tint)
-        }
+    var bitmap by remember(key) { mutableStateOf(iconLoader.peek(key)) }
+    LaunchedEffect(key) {
+        if (bitmap == null) bitmap = iconLoader.load(appId, sizePx, densityDpi, appearance, tint)
     }
     val shape = iconClip(appearance.shape)
     val clipModifier = if (appearance.shape == IconShape.SYSTEM) Modifier else Modifier.clip(shape)
