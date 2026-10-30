@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -19,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -54,7 +52,6 @@ fun AppTile(
     iconSize: Dp,
     iconShape: IconShape,
     themed: Boolean,
-    badgeCount: Int,
     homeStyle: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -85,10 +82,6 @@ fun AppTile(
                     Icon(Icons.Default.Android, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            if (badgeCount > 0) Badge(
-                modifier = Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-3).dp),
-                containerColor = MaterialTheme.colorScheme.error,
-            ) { Text(if (badgeCount > 99) "99+" else badgeCount.toString()) }
         }
         Spacer(Modifier.height(5.dp))
         Text(

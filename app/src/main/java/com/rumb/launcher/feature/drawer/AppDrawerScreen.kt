@@ -80,7 +80,7 @@ fun AppDrawerScreen(
                             AppTile(
                                 app = app, iconLoader = iconLoader, iconSize = state.settings.iconSize.dp,
                                 iconShape = state.settings.iconShape, themed = state.settings.themedIcons,
-                                badgeCount = state.notificationCounts[app.packageName] ?: 0, homeStyle = false,
+                                homeStyle = false,
                                 onClick = { onLaunch(app) }, onLongClick = { onLongPress(app) },
                             )
                         }

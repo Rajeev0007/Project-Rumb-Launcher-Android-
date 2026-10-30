@@ -275,7 +275,6 @@ private fun HomePage(
                                     iconSize = settings.iconSize.dp,
                                     iconShape = settings.iconShape,
                                     themed = settings.themedIcons,
-                                    badgeCount = state.notificationCounts[app.packageName] ?: 0,
                                     homeStyle = true,
                                     onClick = { onLaunch(app) },
                                     onLongClick = null,
@@ -400,7 +399,7 @@ private fun Dock(
             } else {
                 apps.forEach { app -> AppTile(
                     app, iconLoader, 44.dp, state.settings.iconShape, state.settings.themedIcons,
-                    state.notificationCounts[app.packageName] ?: 0, true, Modifier.weight(1f), { onLaunch(app) }, null,
+                    true, Modifier.weight(1f), { onLaunch(app) }, null,
                 ) }
                 IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Apps, "All apps", tint = Color.White) }
                 IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, "Settings", tint = Color.White) }

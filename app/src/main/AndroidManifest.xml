@@ -14,7 +14,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.RumbLauncher">
+        android:theme="@style/Theme.RumbLauncher"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:excludeFromRecents="true"
@@ -31,16 +32,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <service
-            android:name=".platform.notifications.NotificationDotsService"
-            android:exported="false"
-            android:label="@string/notification_service_label"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
     </application>
 
 </manifest>

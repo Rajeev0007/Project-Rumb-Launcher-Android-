@@ -25,7 +25,6 @@ import com.rumb.launcher.feature.drawer.AppDrawerScreen
 import com.rumb.launcher.feature.home.HomeScreen
 import com.rumb.launcher.feature.settings.SettingsScreen
 import com.rumb.launcher.platform.LauncherActivityController
-import com.rumb.launcher.platform.notifications.NotificationDotStore
 import com.rumb.launcher.ui.theme.RumbLauncherTheme
 
 @Composable
@@ -86,7 +85,6 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                 )
                 Destination.SETTINGS -> SettingsScreen(
                     settings = state.settings,
-                    notificationAccess = NotificationDotStore.hasAccess(context),
                     onBack = { model.navigate(Destination.HOME) },
                     onTheme = model::updateTheme,
                     onDynamicColor = model::updateDynamicColor,
@@ -107,8 +105,6 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                     onClockSize = model::updateClockSize,
                     onShowDate = model::updateShowDate,
                     onShowSeconds = model::updateShowSeconds,
-                    onNotificationDots = model::updateNotificationDots,
-                    onNotificationAccess = model.systemActions::openNotificationAccess,
                     onSwipeUp = model::updateSwipeUp,
                     onSwipeDown = model::updateSwipeDown,
                     onDoubleTap = model::updateDoubleTap,
@@ -134,7 +130,6 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                 onToggleDock = { model.toggleDock(app); model.selectApp(null) },
                 onHide = { model.toggleHidden(app); model.selectApp(null) },
                 onInfo = { model.systemActions.openAppInfo(app); model.selectApp(null) },
-                onUninstall = { model.systemActions.requestUninstall(app); model.selectApp(null) },
                 onShortcut = { model.launchShortcut(it); model.selectApp(null) },
             )
         }

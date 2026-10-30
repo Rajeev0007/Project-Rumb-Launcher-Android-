@@ -15,13 +15,8 @@ class SystemActions(context: Context) {
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.parse("package:${app.packageName}")),
     )
 
-    fun requestUninstall(app: InstalledApp) = start(
-        Intent(Intent.ACTION_DELETE).setData(Uri.parse("package:${app.packageName}")),
-    )
-
     fun openWallpaperPicker() = start(Intent(Intent.ACTION_SET_WALLPAPER))
     fun openHomeSettings() = start(Intent(Settings.ACTION_HOME_SETTINGS))
-    fun openNotificationAccess() = start(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
 
     fun toast(message: String) = Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
 

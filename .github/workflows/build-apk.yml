@@ -5,6 +5,7 @@ on:
     branches:
       - build/rumb-launcher
       - feature/rumb-launcher-v2
+      - fix/release-security-hardening
   pull_request:
     branches:
       - main
@@ -15,9 +16,14 @@ permissions:
 
 jobs:
   build:
-    name: Build debug APK
+    name: Build signed release APK
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      RUMB_KEYSTORE_PATH: ${{ runner.temp }}/rumb-release.jks
+      RUMB_KEYSTORE_PASSWORD: rumb-${{ github.run_id }}-${{ github.run_attempt }}
+      RUMB_KEY_ALIAS: rumb-release
+      RUMB_KEY_PASSWORD: rumb-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Check out source
@@ -32,14 +38,30 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Validate and build debug APK
-        run: ./gradlew lintDebug assembleDebug --no-daemon
+      - name: Create isolated release signing key
+        run: >-
+          keytool -genkeypair -noprompt
+          -keystore "$RUMB_KEYSTORE_PATH"
+          -storepass "$RUMB_KEYSTORE_PASSWORD"
+          -alias "$RUMB_KEY_ALIAS"
+          -keypass "$RUMB_KEY_PASSWORD"
+          -keyalg RSA -keysize 4096 -validity 3650
+          -dname "CN=Rumb Launcher, OU=Release, O=Rumb, L=Unknown, ST=Unknown, C=US"
 
-      - name: Upload APK
+      - name: Lint and build signed release APK
+        run: ./gradlew lintRelease assembleRelease --no-daemon
+
+      - name: Verify APK signature
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v7
         with:
-          name: Rumb-Launcher-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Rumb-Launcher-release
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -48,20 +70,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$GITHUB_REF_NAME" == "feature/rumb-launcher-v2" ]]; then
-            TAG="v2.0.1"
-            TITLE="Rumb Launcher v2.0.1"
-          else
-            TAG="v1.0.0"
-            TITLE="Rumb Launcher v1.0.0"
-          fi
-          APK="Rumb-Launcher-${TAG}-debug.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$APK"
+          case "$GITHUB_REF_NAME" in
+            fix/release-security-hardening)
+              TAG="v2.1.0"
+              TITLE="Rumb Launcher v2.1.0 Hardened Standard"
+              ;;
+            feature/rumb-launcher-v2)
+              TAG="v2.0.1"
+              TITLE="Rumb Launcher v2.0.1"
+              ;;
+            *)
+              TAG="v1.0.0"
+              TITLE="Rumb Launcher v1.0.0"
+              ;;
+          esac
+          APK="Rumb-Launcher-${TAG}-release.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          sha256sum "$APK" > "$APK.sha256"
           if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
+            gh release upload "$TAG" "$APK" "$APK.sha256" --clobber
           else
-            gh release create "$TAG" "$APK" \
+            gh release create "$TAG" "$APK" "$APK.sha256" \
               --target "$GITHUB_SHA" \
               --title "$TITLE" \
-              --notes "Install this debug APK on Android 8.0 or newer, then select Rumb Launcher as your default home app."
+              --notes "Signed and minified standard release for Android 8.0 or newer. This edition has no network permission, notification-listener service, or direct uninstall capability."
           fi

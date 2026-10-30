@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddBox
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
@@ -49,7 +48,6 @@ import com.rumb.launcher.domain.ThemePreference
 @Composable
 fun SettingsScreen(
     settings: LauncherSettings,
-    notificationAccess: Boolean,
     onBack: () -> Unit,
     onTheme: (ThemePreference) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
@@ -70,8 +68,6 @@ fun SettingsScreen(
     onClockSize: (Int) -> Unit,
     onShowDate: (Boolean) -> Unit,
     onShowSeconds: (Boolean) -> Unit,
-    onNotificationDots: (Boolean) -> Unit,
-    onNotificationAccess: () -> Unit,
     onSwipeUp: (GestureAction) -> Unit,
     onSwipeDown: (GestureAction) -> Unit,
     onDoubleTap: (GestureAction) -> Unit,
@@ -81,7 +77,7 @@ fun SettingsScreen(
     onExport: () -> Unit,
     onImport: () -> Unit,
 ) {
-    val supportedGestureActions = GestureAction.entries.filter { it != GestureAction.OPEN_NOTIFICATIONS }
+    val supportedGestureActions = GestureAction.entries
     Scaffold(topBar = {
         Row(Modifier.fillMaxWidth().safeDrawingPadding().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to home") }
@@ -151,17 +147,11 @@ fun SettingsScreen(
             Label("Pinch")
             Choices(supportedGestureActions, settings.pinchAction, { it.label() }, onPinch)
             Text(
-                "Pinch requires two pointers to change span and is observed without consuming app, widget, drag, or page events. Android provides no public API for third-party launchers to expand notifications. Rumb does not replace the secure system lock screen.",
+                "Pinch requires two pointers to change span and is observed without consuming app, widget, drag, or page events. Rumb does not replace the secure system lock screen.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 10.dp),
             )
-
-            Heading("Notification dots")
-            Toggle("Show notification dots", "Only per-app counts are kept in memory. Notification content is never persisted.", settings.notificationDots, onNotificationDots)
-            OutlinedButton(onClick = onNotificationAccess, Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Notifications, null); Spacer(Modifier.width(8.dp)); Text(if (notificationAccess) "Notification access granted" else "Grant notification access")
-            }
 
             Heading("Backup")
             Text("Exports layout and settings as versioned JSON. Device-specific widget IDs and bindings are excluded.", style = MaterialTheme.typography.bodySmall)
@@ -218,6 +208,5 @@ private fun GestureAction.label() = when (this) {
     GestureAction.NONE -> "None"
     GestureAction.OPEN_DRAWER -> "All apps"
     GestureAction.OPEN_SETTINGS -> "Settings"
-    GestureAction.OPEN_NOTIFICATIONS -> "Notifications"
     GestureAction.LOCK_LAYOUT -> "Toggle layout lock"
 }

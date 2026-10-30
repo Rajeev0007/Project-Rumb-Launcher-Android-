@@ -36,7 +36,7 @@ enum class ClockStyle { LARGE, COMPACT, MINIMAL }
 enum class ClockAlignment { LEFT, CENTER, RIGHT }
 enum class ClockTimeFormat { SYSTEM, TWELVE_HOUR, TWENTY_FOUR_HOUR }
 enum class ClockFont { SANS, SERIF, MONOSPACE }
-enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SETTINGS, OPEN_NOTIFICATIONS, LOCK_LAYOUT }
+enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SETTINGS, LOCK_LAYOUT }
 enum class HomeItemType { APP, FOLDER, WIDGET }
 
 data class HomeItem(
@@ -70,7 +70,6 @@ data class LauncherSettings(
     val clockSize: Int = 58,
     val showDate: Boolean = true,
     val showSeconds: Boolean = false,
-    val notificationDots: Boolean = false,
     val swipeUpAction: GestureAction = GestureAction.OPEN_DRAWER,
     val swipeDownAction: GestureAction = GestureAction.NONE,
     val doubleTapAction: GestureAction = GestureAction.LOCK_LAYOUT,

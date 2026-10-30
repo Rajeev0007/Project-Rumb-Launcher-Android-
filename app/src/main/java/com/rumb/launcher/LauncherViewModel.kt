@@ -29,7 +29,6 @@ import com.rumb.launcher.platform.SystemActions
 import com.rumb.launcher.platform.WidgetSelection
 import com.rumb.launcher.platform.apps.LauncherAppsCatalog
 import com.rumb.launcher.platform.icons.AppIconLoader
-import com.rumb.launcher.platform.notifications.NotificationDotStore
 import java.util.UUID
 import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
@@ -65,9 +64,8 @@ class LauncherViewModel(context: Context) : ViewModel() {
         baseState,
         openedFolderId,
         shortcuts,
-        NotificationDotStore.counts,
         message,
-    ) { base, folderId, availableShortcuts, counts, currentMessage ->
+    ) { base, folderId, availableShortcuts, currentMessage ->
         val visibleApps = base.catalog.apps.filterNot { it.id in base.settings.hiddenApps }
         LauncherUiState(
             settings = base.settings,
@@ -82,7 +80,6 @@ class LauncherViewModel(context: Context) : ViewModel() {
             selectedApp = base.selectedApp,
             openedFolder = folderId?.let { id -> base.settings.homeItems.firstOrNull { it.id == id && it.type == HomeItemType.FOLDER } },
             shortcuts = availableShortcuts,
-            notificationCounts = if (base.settings.notificationDots) counts else emptyMap(),
             message = currentMessage,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, LauncherUiState())
@@ -335,7 +332,6 @@ class LauncherViewModel(context: Context) : ViewModel() {
     fun updateClockSize(value: Int) = update { it.copy(clockSize = value) }
     fun updateShowDate(value: Boolean) = update { it.copy(showDate = value) }
     fun updateShowSeconds(value: Boolean) = update { it.copy(showSeconds = value) }
-    fun updateNotificationDots(value: Boolean) = update { it.copy(notificationDots = value) }
     fun updateSwipeUp(value: GestureAction) = update { it.copy(swipeUpAction = value) }
     fun updateSwipeDown(value: GestureAction) = update { it.copy(swipeDownAction = value) }
     fun updateDoubleTap(value: GestureAction) = update { it.copy(doubleTapAction = value) }
@@ -346,7 +342,6 @@ class LauncherViewModel(context: Context) : ViewModel() {
             GestureAction.NONE -> Unit
             GestureAction.OPEN_DRAWER -> navigate(Destination.DRAWER)
             GestureAction.OPEN_SETTINGS -> navigate(Destination.SETTINGS)
-            GestureAction.OPEN_NOTIFICATIONS -> showMessage("Android does not expose notification shade control to third-party launchers")
             GestureAction.LOCK_LAYOUT -> updateLayoutLocked(!repository.state.value.layoutLocked)
         }
     }
@@ -422,6 +417,5 @@ data class LauncherUiState(
     val selectedApp: InstalledApp? = null,
     val openedFolder: HomeItem? = null,
     val shortcuts: List<AppShortcut> = emptyList(),
-    val notificationCounts: Map<String, Int> = emptyMap(),
     val message: String? = null,
 )

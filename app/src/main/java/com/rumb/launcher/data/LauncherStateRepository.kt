@@ -188,7 +188,6 @@ class LauncherStateRepository(context: Context) {
         put("clockSize", value.clockSize)
         put("showDate", value.showDate)
         put("showSeconds", value.showSeconds)
-        put("notificationDots", value.notificationDots)
         put("swipeUpAction", value.swipeUpAction.name)
         put("swipeDownAction", value.swipeDownAction.name)
         put("doubleTapAction", value.doubleTapAction.name)
@@ -253,7 +252,6 @@ class LauncherStateRepository(context: Context) {
                 clockSize = json.optInt("clockSize", defaultClockSize(json)),
                 showDate = json.optBoolean("showDate", true),
                 showSeconds = json.optBoolean("showSeconds", false),
-                notificationDots = json.optBoolean("notificationDots", false),
                 swipeUpAction = enumValue(enum("swipeUpAction", "OPEN_DRAWER"), GestureAction.OPEN_DRAWER),
                 swipeDownAction = enumValue(enum("swipeDownAction", "NONE"), GestureAction.NONE),
                 doubleTapAction = enumValue(enum("doubleTapAction", "LOCK_LAYOUT"), GestureAction.LOCK_LAYOUT),
