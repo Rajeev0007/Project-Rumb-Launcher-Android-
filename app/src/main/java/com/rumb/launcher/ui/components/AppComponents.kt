@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
@@ -113,8 +114,13 @@ fun AppIconImage(
         iconLoader.cacheKey(appId, sizePx, densityDpi, appearance, tint)
     }
     val initial = remember(key) { iconLoader.peek(key) }
-    val bitmap by produceState(initial, key) {
-        value = iconLoader.peek(key) ?: iconLoader.load(appId, sizePx, densityDpi, appearance, tint)
+    val bitmap by produceState<ImageBitmap?>(initialValue = initial, key1 = key) {
+        val cached = iconLoader.peek(key)
+        if (cached != null) {
+            value = cached
+        } else {
+            value = iconLoader.load(appId, sizePx, densityDpi, appearance, tint)
+        }
     }
     val shape = iconClip(appearance.shape)
     val clipModifier = if (appearance.shape == IconShape.SYSTEM) Modifier else Modifier.clip(shape)
