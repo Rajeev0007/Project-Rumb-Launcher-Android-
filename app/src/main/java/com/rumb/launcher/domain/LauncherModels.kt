@@ -31,12 +31,13 @@ data class AppShortcut(
 )
 
 enum class ThemePreference { SYSTEM, LIGHT, DARK, AMOLED }
+enum class VisualStyle { AURA_GLASS, SOFT_PANEL, CRYSTAL_DOCK, PURE_MINIMAL }
 enum class IconShape { SYSTEM, CIRCLE, ROUNDED, SQUIRCLE }
 enum class ClockStyle { LARGE, COMPACT, MINIMAL }
 enum class ClockAlignment { LEFT, CENTER, RIGHT }
 enum class ClockTimeFormat { SYSTEM, TWELVE_HOUR, TWENTY_FOUR_HOUR }
 enum class ClockFont { SANS, SERIF, MONOSPACE }
-enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SETTINGS, OPEN_NOTIFICATIONS, LOCK_LAYOUT }
+enum class GestureAction { NONE, OPEN_DRAWER, OPEN_SETTINGS, LOCK_LAYOUT }
 enum class HomeItemType { APP, FOLDER, WIDGET }
 
 data class HomeItem(
@@ -55,6 +56,7 @@ data class HomeItem(
 data class LauncherSettings(
     val schemaVersion: Int = CURRENT_SCHEMA,
     val theme: ThemePreference = ThemePreference.SYSTEM,
+    val visualStyle: VisualStyle = VisualStyle.AURA_GLASS,
     val dynamicColor: Boolean = true,
     val iconShape: IconShape = IconShape.SYSTEM,
     val themedIcons: Boolean = false,
@@ -70,7 +72,6 @@ data class LauncherSettings(
     val clockSize: Int = 58,
     val showDate: Boolean = true,
     val showSeconds: Boolean = false,
-    val notificationDots: Boolean = false,
     val swipeUpAction: GestureAction = GestureAction.OPEN_DRAWER,
     val swipeDownAction: GestureAction = GestureAction.NONE,
     val doubleTapAction: GestureAction = GestureAction.LOCK_LAYOUT,
@@ -79,7 +80,7 @@ data class LauncherSettings(
     val homeItems: List<HomeItem> = emptyList(),
     val dockApps: List<AppId> = emptyList(),
 ) {
-    companion object { const val CURRENT_SCHEMA = 3 }
+    companion object { const val CURRENT_SCHEMA = 4 }
 }
 
 data class CatalogState(

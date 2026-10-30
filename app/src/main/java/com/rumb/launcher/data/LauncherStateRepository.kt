@@ -14,6 +14,7 @@ import com.rumb.launcher.domain.HomeItemType
 import com.rumb.launcher.domain.IconShape
 import com.rumb.launcher.domain.LauncherSettings
 import com.rumb.launcher.domain.ThemePreference
+import com.rumb.launcher.domain.VisualStyle
 import com.rumb.launcher.domain.normalizeHomePlacements
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -173,6 +174,7 @@ class LauncherStateRepository(context: Context) {
         put("format", FORMAT)
         put("version", LauncherSettings.CURRENT_SCHEMA)
         put("theme", value.theme.name)
+        put("visualStyle", value.visualStyle.name)
         put("dynamicColor", value.dynamicColor)
         put("iconShape", value.iconShape.name)
         put("themedIcons", value.themedIcons)
@@ -188,7 +190,6 @@ class LauncherStateRepository(context: Context) {
         put("clockSize", value.clockSize)
         put("showDate", value.showDate)
         put("showSeconds", value.showSeconds)
-        put("notificationDots", value.notificationDots)
         put("swipeUpAction", value.swipeUpAction.name)
         put("swipeDownAction", value.swipeDownAction.name)
         put("doubleTapAction", value.doubleTapAction.name)
@@ -238,6 +239,7 @@ class LauncherStateRepository(context: Context) {
         return normalize(
             LauncherSettings(
                 theme = enumValue(enum("theme", "SYSTEM"), ThemePreference.SYSTEM),
+                visualStyle = enumValue(enum("visualStyle", "AURA_GLASS"), VisualStyle.AURA_GLASS),
                 dynamicColor = json.optBoolean("dynamicColor", true),
                 iconShape = enumValue(enum("iconShape", "SYSTEM"), IconShape.SYSTEM),
                 themedIcons = json.optBoolean("themedIcons", false),
@@ -253,7 +255,6 @@ class LauncherStateRepository(context: Context) {
                 clockSize = json.optInt("clockSize", defaultClockSize(json)),
                 showDate = json.optBoolean("showDate", true),
                 showSeconds = json.optBoolean("showSeconds", false),
-                notificationDots = json.optBoolean("notificationDots", false),
                 swipeUpAction = enumValue(enum("swipeUpAction", "OPEN_DRAWER"), GestureAction.OPEN_DRAWER),
                 swipeDownAction = enumValue(enum("swipeDownAction", "NONE"), GestureAction.NONE),
                 doubleTapAction = enumValue(enum("doubleTapAction", "LOCK_LAYOUT"), GestureAction.LOCK_LAYOUT),

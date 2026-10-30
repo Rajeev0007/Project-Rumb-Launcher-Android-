@@ -20,8 +20,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -119,13 +121,18 @@ fun LauncherClock(
             fontWeight = fontWeight,
             fontFamily = fontFamily,
             textAlign = textAlign,
+            style = MaterialTheme.typography.displayLarge.copy(
+                shadow = Shadow(Color.Black.copy(alpha = .58f), Offset(0f, 2f), 8f),
+            ),
             maxLines = 1,
         )
         if (showDate && style != ClockStyle.MINIMAL) Text(
             text = now.format(dateFormatter),
             modifier = Modifier.fillMaxWidth(),
             color = Color.White.copy(.86f),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleMedium.copy(
+                shadow = Shadow(Color.Black.copy(alpha = .56f), Offset(0f, 1f), 5f),
+            ),
             fontFamily = fontFamily,
             textAlign = textAlign,
             maxLines = 1,

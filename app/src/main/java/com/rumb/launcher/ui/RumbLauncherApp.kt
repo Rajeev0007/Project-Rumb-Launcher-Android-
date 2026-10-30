@@ -1,6 +1,13 @@
 package com.rumb.launcher.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.SnackbarHost
@@ -9,7 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -25,7 +35,6 @@ import com.rumb.launcher.feature.drawer.AppDrawerScreen
 import com.rumb.launcher.feature.home.HomeScreen
 import com.rumb.launcher.feature.settings.SettingsScreen
 import com.rumb.launcher.platform.LauncherActivityController
-import com.rumb.launcher.platform.notifications.NotificationDotStore
 import com.rumb.launcher.ui.theme.RumbLauncherTheme
 
 @Composable
@@ -34,6 +43,7 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
     val model: LauncherViewModel = viewModel(factory = LauncherViewModel.factory(context.applicationContext))
     val state by model.uiState.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
+    var editMode by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(controller, model) {
         controller.onImportReady = model::importJson
@@ -53,71 +63,99 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
     LaunchedEffect(state.message) {
         state.message?.let { snackbars.showSnackbar(it); model.consumeMessage() }
     }
-    BackHandler(state.destination != Destination.HOME) { model.navigate(Destination.HOME) }
+    BackHandler(editMode || state.destination != Destination.HOME) {
+        if (editMode && state.destination == Destination.HOME) editMode = false
+        else model.navigate(Destination.HOME)
+    }
 
     RumbLauncherTheme(state.settings.theme, state.settings.dynamicColor) {
         Box(Modifier.fillMaxSize()) {
-            when (state.destination) {
-                Destination.HOME -> HomeScreen(
-                    state,
-                    model.iconLoader,
-                    onOpenDrawer = { model.navigate(Destination.DRAWER) },
-                    onOpenSettings = { model.navigate(Destination.SETTINGS) },
-                    onWallpaper = model.systemActions::openWallpaperPicker,
-                    onLaunch = model::launch,
-                    onOpenFolder = model::openFolder,
-                    onRefreshApps = model.catalog::refresh,
-                    onMoveItem = model::moveItem,
-                    onGesture = model::performGesture,
-                    onCreateWidgetView = controller::createWidgetView,
-                    onUpdateWidgetSize = controller::updateWidgetSize,
-                    onRemoveWidget = { itemId ->
-                        model.removeWidget(itemId)?.let(controller::deleteWidgetId)
-                    },
-                )
-                Destination.DRAWER -> AppDrawerScreen(
-                    state,
-                    model.iconLoader,
-                    onBack = { model.navigate(Destination.HOME) },
-                    onSearch = model::search,
-                    onRefresh = model.catalog::refresh,
-                    onLaunch = model::launch,
-                    onLongPress = model::selectApp,
-                )
-                Destination.SETTINGS -> SettingsScreen(
-                    settings = state.settings,
-                    notificationAccess = NotificationDotStore.hasAccess(context),
-                    onBack = { model.navigate(Destination.HOME) },
-                    onTheme = model::updateTheme,
-                    onDynamicColor = model::updateDynamicColor,
-                    onIconShape = model::updateIconShape,
-                    onThemedIcons = model::updateThemedIcons,
-                    onColumns = model::updateColumns,
-                    onRows = model::updateRows,
-                    onIconSize = model::updateIconSize,
-                    onPages = model::updatePageCount,
-                    hiddenAppCount = state.settings.hiddenApps.size,
-                    onUnhideAll = model::unhideAll,
-                    onLayoutLock = model::updateLayoutLocked,
-                    onAddWidget = controller::requestWidget,
-                    onClockStyle = model::updateClockStyle,
-                    onClockAlignment = model::updateClockAlignment,
-                    onClockTimeFormat = model::updateClockTimeFormat,
-                    onClockFont = model::updateClockFont,
-                    onClockSize = model::updateClockSize,
-                    onShowDate = model::updateShowDate,
-                    onShowSeconds = model::updateShowSeconds,
-                    onNotificationDots = model::updateNotificationDots,
-                    onNotificationAccess = model.systemActions::openNotificationAccess,
-                    onSwipeUp = model::updateSwipeUp,
-                    onSwipeDown = model::updateSwipeDown,
-                    onDoubleTap = model::updateDoubleTap,
-                    onPinch = model::updatePinch,
-                    onHomeSettings = model.systemActions::openHomeSettings,
-                    onWallpaper = model.systemActions::openWallpaperPicker,
-                    onExport = { controller.exportJson(model.exportJson()) },
-                    onImport = controller::importJson,
-                )
+            AnimatedContent(
+                targetState = state.destination,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    (fadeIn(tween(190)) + scaleIn(tween(220), initialScale = .975f)) togetherWith
+                        (fadeOut(tween(140)) + scaleOut(tween(160), targetScale = .985f))
+                },
+                label = "launcher route",
+            ) { destination ->
+                when (destination) {
+                    Destination.HOME -> HomeScreen(
+                        state = state,
+                        iconLoader = model.iconLoader,
+                        editMode = editMode,
+                        onEnterEditMode = {
+                            editMode = true
+                            if (state.settings.layoutLocked) {
+                                model.showMessage("Layout is locked. Visual style, wallpaper, and settings remain available.")
+                            }
+                        },
+                        onExitEditMode = { editMode = false },
+                        onVisualStyle = model::updateVisualStyle,
+                        onOpenDrawer = { editMode = false; model.navigate(Destination.DRAWER) },
+                        onOpenSettings = { editMode = false; model.navigate(Destination.SETTINGS) },
+                        onWallpaper = model.systemActions::openWallpaperPicker,
+                        onAddWidget = {
+                            if (state.settings.layoutLocked) {
+                                model.showMessage("Unlock the home layout before adding a widget")
+                            } else {
+                                editMode = false
+                                controller.requestWidget()
+                            }
+                        },
+                        onLaunch = model::launch,
+                        onOpenFolder = model::openFolder,
+                        onRefreshApps = model.catalog::refresh,
+                        onMoveItem = model::moveItem,
+                        onGesture = model::performGesture,
+                        onCreateWidgetView = controller::createWidgetView,
+                        onUpdateWidgetSize = controller::updateWidgetSize,
+                        onRemoveWidget = { itemId ->
+                            model.removeWidget(itemId)?.let(controller::deleteWidgetId)
+                        },
+                    )
+                    Destination.DRAWER -> AppDrawerScreen(
+                        state,
+                        model.iconLoader,
+                        onBack = { model.navigate(Destination.HOME) },
+                        onSearch = model::search,
+                        onRefresh = model.catalog::refresh,
+                        onLaunch = model::launch,
+                        onLongPress = model::selectApp,
+                    )
+                    Destination.SETTINGS -> SettingsScreen(
+                        settings = state.settings,
+                        onBack = { model.navigate(Destination.HOME) },
+                        onVisualStyle = model::updateVisualStyle,
+                        onTheme = model::updateTheme,
+                        onDynamicColor = model::updateDynamicColor,
+                        onIconShape = model::updateIconShape,
+                        onThemedIcons = model::updateThemedIcons,
+                        onColumns = model::updateColumns,
+                        onRows = model::updateRows,
+                        onIconSize = model::updateIconSize,
+                        onPages = model::updatePageCount,
+                        hiddenAppCount = state.settings.hiddenApps.size,
+                        onUnhideAll = model::unhideAll,
+                        onLayoutLock = model::updateLayoutLocked,
+                        onAddWidget = controller::requestWidget,
+                        onClockStyle = model::updateClockStyle,
+                        onClockAlignment = model::updateClockAlignment,
+                        onClockTimeFormat = model::updateClockTimeFormat,
+                        onClockFont = model::updateClockFont,
+                        onClockSize = model::updateClockSize,
+                        onShowDate = model::updateShowDate,
+                        onShowSeconds = model::updateShowSeconds,
+                        onSwipeUp = model::updateSwipeUp,
+                        onSwipeDown = model::updateSwipeDown,
+                        onDoubleTap = model::updateDoubleTap,
+                        onPinch = model::updatePinch,
+                        onHomeSettings = model.systemActions::openHomeSettings,
+                        onWallpaper = model.systemActions::openWallpaperPicker,
+                        onExport = { controller.exportJson(model.exportJson()) },
+                        onImport = controller::importJson,
+                    )
+                }
             }
             SnackbarHost(hostState = snackbars, modifier = Modifier.align(Alignment.BottomCenter))
         }
@@ -134,16 +172,13 @@ fun RumbLauncherRoot(controller: LauncherActivityController) {
                 onToggleDock = { model.toggleDock(app); model.selectApp(null) },
                 onHide = { model.toggleHidden(app); model.selectApp(null) },
                 onInfo = { model.systemActions.openAppInfo(app); model.selectApp(null) },
-                onUninstall = { model.systemActions.requestUninstall(app); model.selectApp(null) },
                 onShortcut = { model.launchShortcut(it); model.selectApp(null) },
             )
         }
         state.openedFolder?.let { folder ->
             FolderDialog(
                 folder = folder,
-                entries = folder.appIds.map { id ->
-                    FolderAppEntry(id, state.catalog.apps.firstOrNull { it.id == id })
-                },
+                entries = folder.appIds.map { id -> FolderAppEntry(id, state.catalog.apps.firstOrNull { it.id == id }) },
                 editable = !state.settings.layoutLocked,
                 onDismiss = { model.openFolder(null) },
                 onLaunch = model::launch,

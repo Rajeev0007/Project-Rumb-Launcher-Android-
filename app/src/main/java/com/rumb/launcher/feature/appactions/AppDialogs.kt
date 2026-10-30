@@ -43,7 +43,6 @@ fun AppActionsDialog(
     onToggleDock: () -> Unit,
     onHide: () -> Unit,
     onInfo: () -> Unit,
-    onUninstall: () -> Unit,
     onShortcut: (AppShortcut) -> Unit,
 ) {
     AlertDialog(
@@ -55,7 +54,6 @@ fun AppActionsDialog(
             shortcuts.take(4).forEach { shortcut -> Action("Shortcut: ${shortcut.label}", Icons.Default.PushPin) { onShortcut(shortcut) } }
             Action("Hide from drawer", Icons.Default.VisibilityOff, onHide)
             Action("App info", Icons.Default.Info, onInfo)
-            Action("Uninstall", Icons.Default.Delete, onUninstall)
         } },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )

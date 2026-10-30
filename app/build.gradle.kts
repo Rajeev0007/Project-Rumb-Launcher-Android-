@@ -4,6 +4,23 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val releaseSigningVariables = listOf(
+    "RUMB_KEYSTORE_PATH",
+    "RUMB_KEYSTORE_PASSWORD",
+    "RUMB_KEY_ALIAS",
+    "RUMB_KEY_PASSWORD",
+)
+val releaseSigningValues = releaseSigningVariables.associateWith { name ->
+    providers.environmentVariable(name).orNull?.takeIf(String::isNotBlank)
+}
+val configuredSigningVariables = releaseSigningValues.filterValues { it != null }.keys
+if (configuredSigningVariables.isNotEmpty() && configuredSigningVariables.size != releaseSigningVariables.size) {
+    val missing = releaseSigningVariables.filterNot(configuredSigningVariables::contains)
+    throw GradleException(
+        "Incomplete release signing configuration. Set all release signing environment variables; missing: ${missing.joinToString()}.",
+    )
+}
+
 android {
     namespace = "com.rumb.launcher"
     compileSdk = 35
@@ -12,8 +29,8 @@ android {
         applicationId = "com.rumb.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "2.0.1"
+        versionCode = 5
+        versionName = "2.2.0"
     }
 
     buildFeatures {
@@ -28,10 +45,23 @@ android {
 
     kotlinOptions { jvmTarget = "17" }
 
+    val releaseSigningConfig = if (configuredSigningVariables.size == releaseSigningVariables.size) {
+        signingConfigs.create("release") {
+            storeFile = file(releaseSigningValues.getValue("RUMB_KEYSTORE_PATH")!!)
+            storePassword = releaseSigningValues.getValue("RUMB_KEYSTORE_PASSWORD")!!
+            keyAlias = releaseSigningValues.getValue("RUMB_KEY_ALIAS")!!
+            keyPassword = releaseSigningValues.getValue("RUMB_KEY_PASSWORD")!!
+        }
+    } else {
+        null
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            releaseSigningConfig?.let { signingConfig = it }
         }
     }
 }
