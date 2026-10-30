@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -40,7 +39,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Uninstall
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -608,7 +607,7 @@ private fun AppActionsDialog(
                     Text("App info", Modifier.weight(1f))
                 }
                 TextButton(onClick = onUninstall, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Uninstall, contentDescription = null)
+                    Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(Modifier.width(10.dp))
                     Text("Uninstall", Modifier.weight(1f))
                 }
