@@ -57,11 +57,10 @@ private const val REPOSITORY_URL = "https://github.com/Rajeev0007/Project-Rumb-L
 private const val RELEASES_URL = "$REPOSITORY_URL/releases"
 private const val ISSUES_URL = "$REPOSITORY_URL/issues"
 private const val PRIVACY_URL = "$REPOSITORY_URL#privacy"
-private const val UPSTREAM_URL = "https://github.com/LawnchairLauncher/lawnchair"
 
 /**
- * Rumb Launcher's About screen: Rumb identity, developer, and links. The licence notices stay
- * under Legal: the open-source acknowledgements and the upstream credit that GPL-3.0 requires.
+ * Rumb Launcher's About screen: Rumb identity, developer, and links. Under Legal, the open-source
+ * licences entry carries the copyright and licence notices that GPL-3.0 and Apache-2.0 require.
  */
 @Composable
 fun About(
@@ -155,15 +154,7 @@ fun About(
                 NavigationActionPreference(
                     label = stringResource(id = R.string.acknowledgements),
                     destination = AboutLicenses,
-                )
-            }
-        }
-        item {
-            PreferenceGroupItem(cutTop = true, cutBottom = true) {
-                PreferenceDivider()
-                ClickablePreference(
-                    label = stringResource(id = R.string.privacy_policy),
-                    onClick = { open(PRIVACY_URL) },
+                    subtitle = "Includes Lawnchair and Android Open Source Project code (GPL-3.0, Apache-2.0)",
                 )
             }
         }
@@ -171,9 +162,8 @@ fun About(
             PreferenceGroupItem(cutTop = true, cutBottom = false) {
                 PreferenceDivider()
                 ClickablePreference(
-                    label = "Based on Lawnchair",
-                    subtitle = "Open-source launcher by the Lawnchair team and AOSP, licensed under GPL-3.0",
-                    onClick = { open(UPSTREAM_URL) },
+                    label = stringResource(id = R.string.privacy_policy),
+                    onClick = { open(PRIVACY_URL) },
                 )
             }
         }

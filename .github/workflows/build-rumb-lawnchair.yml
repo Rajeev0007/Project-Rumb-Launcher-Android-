@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - feature/v4-lawnchair-edition
+      - feature/v4.2-rumb-own
     paths:
       - "lawnchair-edition/**"
       - ".github/workflows/build-rumb-lawnchair.yml"
@@ -27,13 +28,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Lawnchair 15 Beta 3 (tag v15.0.0-beta3.0), the latest upstream release.
-  LAWNCHAIR_REF: 505dbc40e6154c05158b5d0271c45f6a885a411b
-  RUMB_VERSION_NAME: "Rumb 4.1.0 (Lawnchair 15 Beta 3)"
-  # Must increase every release. Lawnchair 15 Beta 3 is 1500020300; Rumb adds its own patch number.
-  RUMB_VERSION_CODE: "1500020310"
-  RELEASE_TAG: v4.1.0
-  RELEASE_TITLE: "Rumb Launcher 4.1.0"
+  # Lawnchair 16-dev at 8429fbe (30 Oct 2026): newest upstream fixes and Android 16 support.
+  # Upstream CI built and published this exact commit successfully.
+  LAWNCHAIR_REF: 8429fbe09dca7a5e087916710ac0535d3fd948bb
+  RUMB_VERSION_NAME: "Rumb 4.2.0"
+  # Must increase every release. Upstream is 1600020100; Rumb adds its own patch number.
+  RUMB_VERSION_CODE: "1600020110"
+  RELEASE_TAG: v4.2.0
+  RELEASE_TITLE: "Rumb Launcher 4.2.0"
 
 jobs:
   build:
