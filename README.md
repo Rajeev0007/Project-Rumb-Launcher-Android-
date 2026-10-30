@@ -1,4 +1,4 @@
-# Rumb Launcher 2.2.0
+# Rumb Launcher 2.2.1
 
 Rumb Launcher is a private, offline Android home-screen replacement built with native Kotlin and Jetpack Compose. Version 2.2 introduces an original visual system and home-customization flow while preserving the hardened standard edition. It supports Android 8.0 (API 26) and newer.
 
@@ -53,7 +53,7 @@ Back leaves customization before leaving Home. Layout lock continues to block it
 
 Rumb requests no network, broad storage, notification-listener, or package-removal capability. It contains no analytics, advertising, or account system. The manifest has no `INTERNET` permission, cleartext traffic is disabled, automatic Android backup is disabled, and the launcher never sends `ACTION_DELETE`.
 
-Explicit JSON export is used instead of Android backup because launcher layouts can contain device/profile-specific identities. Imports are capped at 1 MB and validated before state replacement. Release builds keep code minification and resource shrinking enabled and use the all-or-none environment-based signing configuration.
+Explicit JSON export is used instead of Android backup because launcher layouts can contain device/profile-specific identities. Imports are capped at 1 MB and validated before state replacement. The full release preserves packaged code and resources without minification or shrinking and uses the all-or-none environment-based signing configuration.
 
 These choices reduce sensitive capability surface and common sideloading heuristics. Play Protect and other security products may still inspect or warn about sideloaded apps from unknown sources. This project does not claim approval by an antivirus or app-store security system.
 
