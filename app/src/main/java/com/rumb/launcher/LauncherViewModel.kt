@@ -19,6 +19,7 @@ import com.rumb.launcher.domain.IconShape
 import com.rumb.launcher.domain.InstalledApp
 import com.rumb.launcher.domain.LauncherSettings
 import com.rumb.launcher.domain.ThemePreference
+import com.rumb.launcher.domain.VisualStyle
 import com.rumb.launcher.domain.findFreePlacement
 import com.rumb.launcher.domain.isRegionFree
 import com.rumb.launcher.domain.layoutSpanX
@@ -309,6 +310,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
     fun exportJson(): String = repository.exportJson()
 
     fun updateTheme(value: ThemePreference) = update { it.copy(theme = value) }
+    fun updateVisualStyle(value: VisualStyle) = update { it.copy(visualStyle = value) }
     fun updateDynamicColor(value: Boolean) = update { it.copy(dynamicColor = value) }
     fun updateIconShape(value: IconShape) = update { it.copy(iconShape = value) }
     fun updateThemedIcons(value: Boolean) { iconLoader.invalidate(); update { it.copy(themedIcons = value) } }

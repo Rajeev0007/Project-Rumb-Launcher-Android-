@@ -31,6 +31,7 @@ data class AppShortcut(
 )
 
 enum class ThemePreference { SYSTEM, LIGHT, DARK, AMOLED }
+enum class VisualStyle { AURA_GLASS, SOFT_PANEL, CRYSTAL_DOCK, PURE_MINIMAL }
 enum class IconShape { SYSTEM, CIRCLE, ROUNDED, SQUIRCLE }
 enum class ClockStyle { LARGE, COMPACT, MINIMAL }
 enum class ClockAlignment { LEFT, CENTER, RIGHT }
@@ -55,6 +56,7 @@ data class HomeItem(
 data class LauncherSettings(
     val schemaVersion: Int = CURRENT_SCHEMA,
     val theme: ThemePreference = ThemePreference.SYSTEM,
+    val visualStyle: VisualStyle = VisualStyle.AURA_GLASS,
     val dynamicColor: Boolean = true,
     val iconShape: IconShape = IconShape.SYSTEM,
     val themedIcons: Boolean = false,
@@ -78,7 +80,7 @@ data class LauncherSettings(
     val homeItems: List<HomeItem> = emptyList(),
     val dockApps: List<AppId> = emptyList(),
 ) {
-    companion object { const val CURRENT_SCHEMA = 3 }
+    companion object { const val CURRENT_SCHEMA = 4 }
 }
 
 data class CatalogState(

@@ -72,8 +72,8 @@ jobs:
         run: |
           case "$GITHUB_REF_NAME" in
             fix/release-security-hardening)
-              TAG="v2.1.0"
-              TITLE="Rumb Launcher v2.1.0 Hardened Standard"
+              TAG="v2.2.0"
+              TITLE="Rumb Launcher v2.2.0 Visual Redesign"
               ;;
             feature/rumb-launcher-v2)
               TAG="v2.0.1"
