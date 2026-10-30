@@ -153,16 +153,24 @@ fun SettingsScreen(
                 SettingsCard("Clock", "Time, date, alignment, and typography", settings.visualStyle) {
                     Label("Style", tokens.foreground)
                     Choices(ClockStyle.entries, settings.clockStyle, { it.label() }, onClockStyle)
-                    Label("Alignment", tokens.foreground)
-                    Choices(ClockAlignment.entries, settings.clockAlignment, { it.label() }, onClockAlignment)
-                    Label("Time format", tokens.foreground)
-                    Choices(ClockTimeFormat.entries, settings.clockTimeFormat, { it.label() }, onClockTimeFormat)
-                    Label("Font", tokens.foreground)
-                    Choices(ClockFont.entries, settings.clockFont, { it.label() }, onClockFont)
-                    Label("Size", tokens.foreground)
-                    Choices(listOf(30, 40, 50, 58, 66, 72), settings.clockSize, { "$it sp" }, onClockSize)
-                    Toggle("Show date", null, settings.showDate, onShowDate, true, tokens)
-                    Toggle("Show seconds", "Updates each second and uses slightly more power", settings.showSeconds, onShowSeconds, true, tokens)
+                    if (settings.clockStyle != ClockStyle.HIDDEN) {
+                        Label("Alignment", tokens.foreground)
+                        Choices(ClockAlignment.entries, settings.clockAlignment, { it.label() }, onClockAlignment)
+                        Label("Time format", tokens.foreground)
+                        Choices(ClockTimeFormat.entries, settings.clockTimeFormat, { it.label() }, onClockTimeFormat)
+                        Label("Font", tokens.foreground)
+                        Choices(ClockFont.entries, settings.clockFont, { it.label() }, onClockFont)
+                        Label("Size", tokens.foreground)
+                        Choices(listOf(30, 40, 50, 58, 66, 72), settings.clockSize, { "$it sp" }, onClockSize)
+                        Toggle("Show date", null, settings.showDate, onShowDate, true, tokens)
+                        Toggle("Show seconds", "Updates each second and uses slightly more power", settings.showSeconds, onShowSeconds, true, tokens)
+                    } else {
+                        Text(
+                            "Home shows only wallpaper, your items, and the compact dock. Other clock choices remain saved.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = tokens.mutedForeground,
+                        )
+                    }
                 }
 
                 SettingsCard("Gestures", "Shortcuts that yield to apps, widgets, pages, and drag", settings.visualStyle) {
@@ -273,6 +281,7 @@ private fun ClockTimeFormat.label() = when (this) {
 private fun GestureAction.label() = when (this) {
     GestureAction.NONE -> "None"
     GestureAction.OPEN_DRAWER -> "All apps"
+    GestureAction.OPEN_QUICK_PANEL -> "Quick panel"
     GestureAction.OPEN_SETTINGS -> "Settings"
     GestureAction.LOCK_LAYOUT -> "Toggle layout lock"
 }

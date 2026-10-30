@@ -17,6 +17,7 @@ interface LauncherActivityController {
     fun exportJson(json: String)
     fun importJson()
     fun requestWidget()
+    fun requestWidgetProvider(providerFlattened: String)
     fun createWidgetView(appWidgetId: Int, expectedProvider: String): AppWidgetHostView?
     fun updateWidgetSize(view: AppWidgetHostView, widthDp: Int, heightDp: Int)
     fun deleteWidgetId(appWidgetId: Int)

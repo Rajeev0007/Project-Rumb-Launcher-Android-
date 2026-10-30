@@ -47,6 +47,7 @@ fun LauncherClock(
     showSeconds: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    if (style == ClockStyle.HIDDEN) return
     val context = LocalContext.current
     val locale = context.resources.configuration.locales[0] ?: Locale.getDefault()
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
@@ -108,6 +109,7 @@ fun LauncherClock(
         ClockFont.MONOSPACE -> FontFamily.Monospace
     }
     val fontWeight = when (style) {
+        ClockStyle.HIDDEN -> FontWeight.Thin
         ClockStyle.LARGE -> FontWeight.Light
         ClockStyle.COMPACT -> FontWeight.Normal
         ClockStyle.MINIMAL -> FontWeight.Thin

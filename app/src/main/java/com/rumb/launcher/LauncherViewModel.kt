@@ -30,6 +30,8 @@ import com.rumb.launcher.platform.SystemActions
 import com.rumb.launcher.platform.WidgetSelection
 import com.rumb.launcher.platform.apps.LauncherAppsCatalog
 import com.rumb.launcher.platform.icons.AppIconLoader
+import com.rumb.launcher.platform.widgets.WidgetPreviewLoader
+import com.rumb.launcher.platform.widgets.WidgetProviderCatalog
 import java.util.UUID
 import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +48,8 @@ class LauncherViewModel(context: Context) : ViewModel() {
     private val repository = LauncherStateRepository(appContext)
     val catalog = LauncherAppsCatalog(appContext)
     val iconLoader = AppIconLoader(appContext, catalog)
+    val widgetCatalog = WidgetProviderCatalog(appContext)
+    val widgetPreviewLoader = WidgetPreviewLoader(appContext, widgetCatalog)
     val systemActions = SystemActions(appContext)
 
     private val destination = MutableStateFlow(Destination.HOME)
@@ -343,6 +347,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
         when (action) {
             GestureAction.NONE -> Unit
             GestureAction.OPEN_DRAWER -> navigate(Destination.DRAWER)
+            GestureAction.OPEN_QUICK_PANEL -> navigate(Destination.QUICK_PANEL)
             GestureAction.OPEN_SETTINGS -> navigate(Destination.SETTINGS)
             GestureAction.LOCK_LAYOUT -> updateLayoutLocked(!repository.state.value.layoutLocked)
         }
@@ -388,6 +393,7 @@ class LauncherViewModel(context: Context) : ViewModel() {
 
     override fun onCleared() {
         catalog.close()
+        widgetCatalog.close()
         super.onCleared()
     }
 
@@ -407,7 +413,7 @@ private data class BaseState(
     val selectedApp: InstalledApp?,
 )
 
-enum class Destination { HOME, DRAWER, SETTINGS }
+enum class Destination { HOME, DRAWER, QUICK_PANEL, SETTINGS }
 
 data class LauncherUiState(
     val settings: LauncherSettings = LauncherSettings(),
