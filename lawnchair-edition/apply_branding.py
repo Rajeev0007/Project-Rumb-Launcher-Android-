@@ -29,7 +29,47 @@ CODE_PATCHES = [
         "lawnchair/src/app/lawnchair/preferences/PreferenceManager.kt",
         '    val hotseatBGAlpha = IntPref("pref_hotseatBGTransparency", 100, recreate)\n',
         '    val hotseatBGAlpha = IntPref("pref_hotseatBGTransparency", 100, recreate)\n'
-        '    val rumbDockGradient = BoolPref("pref_rumbDockGradient", false, recreate)\n',
+        '    val rumbDockGradient = BoolPref("pref_rumbDockGradient", false, recreate)\n'
+        '    val rumbListDrawer = BoolPref("pref_rumbListDrawer", false, recreate)\n',
+    ),
+    # List drawer: in the app drawer (not the taskbar), lay each app out as a row with a
+    # small icon at the start and the name beside it. Styles sets one column and short rows.
+    (
+        "src/com/android/launcher3/BubbleTextView.java",
+        "        mIconSize = a.getDimensionPixelSize(R.styleable.BubbleTextView_iconSizeOverride,\n"
+        "                defaultIconSize);\n",
+        "        final boolean rumbListRow = mDisplay == DISPLAY_ALL_APPS && mActivity instanceof Launcher\n"
+        "                && PreferenceManager.getInstance(context).getRumbListDrawer().get();\n"
+        "        mIconSize = rumbListRow ? Math.round(defaultIconSize * 0.62f)\n"
+        "                : a.getDimensionPixelSize(R.styleable.BubbleTextView_iconSizeOverride,\n"
+        "                defaultIconSize);\n",
+    ),
+    (
+        "src/com/android/launcher3/BubbleTextView.java",
+        "        setAccessibilityDelegate(mActivity.getAccessibilityDelegate());\n"
+        "        setTextAlpha(1f);\n",
+        "        setAccessibilityDelegate(mActivity.getAccessibilityDelegate());\n"
+        "        setTextAlpha(1f);\n"
+        "        if (rumbListRow) {\n"
+        "            float density = getResources().getDisplayMetrics().density;\n"
+        "            mLayoutHorizontal = true;\n"
+        "            mCenterVertically = false;\n"
+        "            setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);\n"
+        "            setCompoundDrawablePadding(Math.round(16 * density));\n"
+        "            setPaddingRelative(Math.round(24 * density), 0, Math.round(16 * density), 0);\n"
+        "            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);\n"
+        "        }\n",
+    ),
+    # Bug fix: themed icons switched themselves off every time the launcher restarted unless
+    # a separate themed icon pack was installed. Android 13+ apps ship their own monochrome
+    # icons, so only apply that old migration on Android 12 and below.
+    (
+        "lawnchair/src/app/lawnchair/LawnchairLauncher.kt",
+        "            prefs.themedIcons.get() &&\n"
+        "            packageManager.getThemedIconPacksInstalled(this).isEmpty()\n",
+        "            android.os.Build.VERSION.SDK_INT < 33 &&\n"
+        "            prefs.themedIcons.get() &&\n"
+        "            packageManager.getThemedIconPacksInstalled(this).isEmpty()\n",
     ),
     # Draw the dock as a dock-colour to accent-colour gradient when enabled.
     (
@@ -76,6 +116,36 @@ CODE_PATCHES = [
         "                isSelected = currentRoute is app.lawnchair.ui.preferences.navigation.RumbStyles,\n"
         "            )\n",
     ),
+    # Hidden settings screen: route, navigation, and a dashboard entry before Backup.
+    (
+        "lawnchair/src/app/lawnchair/ui/preferences/navigation/PreferenceRoutes.kt",
+        "@Serializable\ndata object HomeScreen : PreferenceRootRoute, PreferenceDeepLink {\n",
+        "@Serializable\ndata object RumbHiddenSettings : PreferenceRootRoute, PreferenceDeepLink {\n"
+        '    override val deepLink = "$URI/hidden_settings"\n}\n\n'
+        "@Serializable\ndata object HomeScreen : PreferenceRootRoute, PreferenceDeepLink {\n",
+    ),
+    (
+        "lawnchair/src/app/lawnchair/ui/preferences/navigation/PreferenceNavigation.kt",
+        "        composable<General>(\n",
+        "        composable<RumbHiddenSettings>(\n"
+        "            deepLinks = getDeepLink(RumbHiddenSettings),\n"
+        "        ) { app.lawnchair.ui.preferences.destinations.RumbHiddenSettingsPreferences() }\n"
+        "        composable<General>(\n",
+    ),
+    (
+        "lawnchair/src/app/lawnchair/ui/preferences/destinations/PreferencesDashboard.kt",
+        "            PreferenceCategory(\n"
+        "                label = stringResource(R.string.backup_and_restore_label),\n",
+        "            PreferenceCategory(\n"
+        '                label = "Hidden settings",\n'
+        '                description = "Android screens with no menu entry: developer, notification log, permissions",\n'
+        "                iconResource = R.drawable.rumb_ic_hidden_settings,\n"
+        "                onNavigate = { onNavigate(app.lawnchair.ui.preferences.navigation.RumbHiddenSettings) },\n"
+        "                isSelected = currentRoute is app.lawnchair.ui.preferences.navigation.RumbHiddenSettings,\n"
+        "            )\n\n"
+        "            PreferenceCategory(\n"
+        "                label = stringResource(R.string.backup_and_restore_label),\n",
+    ),
     # Bug fix: the drawer defaulted to 50% opacity, so Home screen icons showed through
     # it whenever wallpaper blur was off. Rumb's drawer is opaque unless you choose otherwise.
     (
@@ -84,8 +154,11 @@ CODE_PATCHES = [
         'val drawerOpacity = FloatPref("pref_drawerOpacity", 1f, recreate)',
     ),
     # Bug fix: Home screen icons stayed fully drawn behind the app drawer. Fade the
-    # workspace and dock out as the drawer opens (progress 1 = closed, 0 = open), so a
-    # translucent or blurred drawer shows only the wallpaper, like a real glass panel.
+    # workspace out as the drawer opens (progress 1 = closed, 0 = open), so a translucent
+    # or blurred drawer shows only the wallpaper, like a real glass panel. The dock is left
+    # to the launcher's own state animation, which already hides it on phones; forcing its
+    # alpha here fought that animation (dock flicker going from the drawer to recents) and
+    # hid the dock on tablets, where it is meant to stay visible.
     (
         "src/com/android/launcher3/allapps/AllAppsTransitionController.java",
         "        getAppsViewProgressTranslationY().setValue(mProgress * shiftRange);\n"
@@ -93,8 +166,7 @@ CODE_PATCHES = [
         "        getAppsViewProgressTranslationY().setValue(mProgress * shiftRange);\n"
         "        mLauncher.onAllAppsTransition(1 - progress);\n"
         "        float rumbHomeAlpha = Math.max(0f, Math.min(1f, (progress - 0.15f) / 0.35f));\n"
-        "        mLauncher.getWorkspace().setAlpha(rumbHomeAlpha);\n"
-        "        mLauncher.getHotseat().setAlpha(rumbHomeAlpha);\n",
+        "        mLauncher.getWorkspace().setAlpha(rumbHomeAlpha);\n",
     ),
     # Bug fix: the Personal/Work tab used the system accent (green on many phones)
     # instead of Rumb's accent, clashing with the rest of the theme.
@@ -155,6 +227,11 @@ RUMB_DEFAULTS = {
     "config_default_edit_home_screen_on_popup": "true",
     "config_default_lock_home_screen_on_popup": "true",
     "config_default_show_system_settings_entry_on_popup": "true",
+    # Smoothness: by default the launcher reloaded every icon each time it was created,
+    # which stalls the Home screen after theme, accent or rotation changes. Icons are
+    # still refreshed when the icon pack, shape or theme changes. Can be turned back on
+    # in Settings > General > Icons > Advanced.
+    "config_default_always_reload_icons": "false",
 }
 
 
