@@ -84,6 +84,50 @@ CODE_PATCHES = [
         "            background.setColor(finalColor);\n"
         "        }\n",
     ),
+    # Bug fix: the dock panel filled the whole dock area, down under the gesture bar, so it
+    # looked glued to the screen edge. Float it around the icon row with an 8dp margin
+    # (your own Dock inset settings still add to this), and redo it once the dock knows its
+    # padding, which is only set after the constructor runs.
+    (
+        "src/com/android/launcher3/Hotseat.java",
+        "        InsetDrawable bg = new InsetDrawable(background,\n"
+        "                insetHorizontalLeft, insetVerticalTop, insetHorizontalRight, insetVerticalBottom);\n",
+        "        int rumbMargin = Math.round(8 * getResources().getDisplayMetrics().density);\n"
+        "        int rumbSide = Math.round(12 * getResources().getDisplayMetrics().density);\n"
+        "        boolean rumbFloat = !mActivity.getDeviceProfile().isVerticalBarLayout();\n"
+        "        if (rumbFloat) {\n"
+        "            insetHorizontalLeft += rumbSide;\n"
+        "            insetHorizontalRight += rumbSide;\n"
+        "            insetVerticalTop += Math.max(0, getPaddingTop() - rumbMargin);\n"
+        "            insetVerticalBottom += Math.max(0, getPaddingBottom() - rumbMargin);\n"
+        "        }\n"
+        "        InsetDrawable bg = new InsetDrawable(background,\n"
+        "                insetHorizontalLeft, insetVerticalTop, insetHorizontalRight, insetVerticalBottom);\n",
+    ),
+    (
+        "src/com/android/launcher3/Hotseat.java",
+        "        setPadding(padding.left, padding.top, padding.right, padding.bottom);\n"
+        "        setLayoutParams(lp);\n",
+        "        setPadding(padding.left, padding.top, padding.right, padding.bottom);\n"
+        "        setUpBackground();\n"
+        "        setLayoutParams(lp);\n",
+    ),
+    # Bug fix: the suggested-apps row in the drawer was padded by left + right padding on
+    # each side, so it sat further in than the app grid and its icons did not line up
+    # with the columns below it.
+    (
+        "src/com/android/launcher3/allapps/FloatingHeaderView.java",
+        "        int leftRightPadding = dp.allAppsPadding.left + dp.allAppsPadding.right;\n"
+        "        setPadding(leftRightPadding, getPaddingTop(), leftRightPadding, getPaddingBottom());\n",
+        "        setPadding(dp.allAppsPadding.left, getPaddingTop(), dp.allAppsPadding.right, getPaddingBottom());\n",
+    ),
+    # Bug fix: the "All apps" label took the phone's light/dark colour instead of Rumb's
+    # theme, so it vanished (dark on dark) with the Dark theme on a light-mode phone.
+    (
+        "quickstep/src/com/android/launcher3/appprediction/AppsDividerView.java",
+        "        mAllAppsLabelTextColor = context.getColor(R.color.materialColorOnSurface);\n",
+        "        mAllAppsLabelTextColor = Themes.getAttrColor(context, android.R.attr.textColorSecondary);\n",
+    ),
     # Styles screen: route, navigation, and a dashboard entry right after General.
     (
         "lawnchair/src/app/lawnchair/ui/preferences/navigation/PreferenceRoutes.kt",
@@ -199,6 +243,33 @@ CODE_PATCHES = [
         "lawnchair/src/app/lawnchair/allapps/AllAppsSearchInput.kt",
         'if (input.text.toString() == "/lawnchairdebug") {',
         'if (input.text.toString() == "/rumbdebug") {',
+    ),
+    # Rumb widgets, listed under Rumb Launcher in the widget picker.
+    (
+        "lawnchair/AndroidManifest.xml",
+        '                android:resource="@xml/smartspace_appwidget_info" />\n'
+        "        </receiver>\n",
+        '                android:resource="@xml/smartspace_appwidget_info" />\n'
+        "        </receiver>\n"
+        + "".join(
+            f'\n        <receiver\n'
+            f'            android:name="app.lawnchair.rumb.{cls}"\n'
+            f'            android:exported="false"\n'
+            f'            android:label="@string/rumb_widget_{name}">\n'
+            f'            <intent-filter>\n'
+            f'                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n'
+            f'            </intent-filter>\n'
+            f'            <meta-data\n'
+            f'                android:name="android.appwidget.provider"\n'
+            f'                android:resource="@xml/rumb_widget_{name}_info" />\n'
+            f'        </receiver>\n'
+            for cls, name in (
+                ("RumbDayClockWidget", "day_clock"),
+                ("RumbGlassClockWidget", "glass_clock"),
+                ("RumbControlCenterWidget", "control_center"),
+                ("RumbScreenTimeWidget", "screen_time"),
+            )
+        ),
     ),
     # Searches from Rumb should not be attributed to Lawnchair's partner segment.
     (

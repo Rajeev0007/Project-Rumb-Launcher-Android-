@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rumb_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="start|center_vertical"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingEnd="16dp">
+
+    <TextClock
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-black"
+        android:format12Hour="EEE"
+        android:format24Hour="EEE"
+        android:includeFontPadding="false"
+        android:textAllCaps="true"
+        android:textColor="#FFFFFFFF"
+        android:textSize="64sp"
+        android:shadowColor="#66000000"
+        android:shadowDy="1"
+        android:shadowRadius="6" />
+
+    <TextClock
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="sans-serif-medium"
+        android:format12Hour="h:mm a"
+        android:format24Hour="HH:mm"
+        android:textColor="#FFFFFFFF"
+        android:textSize="22sp"
+        android:shadowColor="#66000000"
+        android:shadowDy="1"
+        android:shadowRadius="6" />
+
+    <TextClock
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:format12Hour="EEEE, d MMMM"
+        android:format24Hour="EEEE, d MMMM"
+        android:textColor="#D9FFFFFF"
+        android:textSize="14sp"
+        android:shadowColor="#66000000"
+        android:shadowDy="1"
+        android:shadowRadius="6" />
+</LinearLayout>

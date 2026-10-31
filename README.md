@@ -9,7 +9,8 @@ A Pixel-style Android home screen by **Rajeev0007**, built on [Lawnchair](https:
 - Rumb violet accent, squircle icons, rounder cards and dialogs, fuzzy app search
 - **Styles** (Settings → Styles): one-tap Pixel, Nova Dark, iOS 27, Minimal List, Glass, One UI, Gradient, and Clean looks
 - List drawer: one app per row with a small icon, like a minimal text launcher
-- **Hidden settings** (Settings → Hidden settings): developer options, notification log, permission screens, and every Settings screen your phone lets Rumb open
+- **Hidden settings** (Settings → Hidden settings): developer options, notification log, permission screens, and every Settings screen your phone lets Rumb open; tap + to put any of them on Home
+- **Rumb widgets** (long-press Home → Widgets → Rumb Launcher): Day Clock, Glass Clock, iOS-style Control Center with a torch toggle, and Screen Time
 - Blur and glass: wallpaper blur, drawer and folder opacity, translucent recents
 - Gradient dock that fades into your accent colour, with transparency and corner radius
 - Icon changer on by default: long-press any app → Edit to pick a new icon from a pack
